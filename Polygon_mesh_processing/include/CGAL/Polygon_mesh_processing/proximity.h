@@ -47,11 +47,6 @@ typedef Kernel::Plane_3    Plane_3;
 bool at_distance_one(const Triangle_3 a, const Triangle_3 b);
 bool triangle_has_on_projected_point(const Triangle_3 &tr, const Point_3 &p);
 
-double round_to_float(Kernel::FT a);
-double round_to_double(Kernel::FT a);
-
-void distance1features(std::vector<Point_3> &points, std::vector< std::vector<size_t> > &triangles, double r, std::vector< std::pair<size_t, size_t> > &outs, bool considerAdjacentFeature);
-
 typedef std::vector< size_t >::iterator Iterator;
 typedef CGAL::Box_intersection_d::Box_with_handle_d<double,3,Iterator> Box;
 
@@ -155,18 +150,6 @@ bool at_distance_one(const Triangle_3 a, const Triangle_3 b){
     		return true;
     }
     return false;
-}
-
-double round_to_double(Kernel::FT a){
-    a.set_relative_precision_of_to_double(1/std::pow(2,52));
-    //a.set_relative_precision_of_to_double(1/std::pow(2,26));
-    return CGAL::to_double(a);
-}
-
-double round_to_float(Kernel::FT a){
-    a.set_relative_precision_of_to_double(1/std::pow(2,26));
-    //a.set_relative_precision_of_to_double(1/std::pow(2,26));
-    return (float) CGAL::to_double(a);
 }
 
 #endif
