@@ -24,6 +24,7 @@
 #include <CGAL/Surface_mesh.h>
 #include <CGAL/Polygon_mesh_processing/corefinement.h>
 //#include <CGAL/Polygon_mesh_processing/autorefinement.h>
+#include <CGAL/Exact_predicates_exact_constructions_kernel.h>
 #include <CGAL/Polygon_mesh_processing/polygon_mesh_to_polygon_soup.h>
 #include <CGAL/Polygon_mesh_processing/IO/polygon_mesh_io.h>
 #include <CGAL/Polygon_mesh_processing/polygon_soup_to_polygon_mesh.h>
@@ -33,9 +34,13 @@
 #include <CGAL/Polygon_mesh_processing/transform.h>
 //#include <CGAL/Polygon_mesh_processing/autorefinement.h>
 #include <CGAL/Simple_cartesian.h>
+#include <CGAL/Real_timer.h>
 
+typedef CGAL::Exact_predicates_exact_constructions_kernel Kernel;
 typedef CGAL::Simple_cartesian<double> Cartesian;
+
 typedef Cartesian::Point_3 Double_Point_3;
+typedef Kernel::Point_3 Point_3;
 
 /*
 struct FunctorFloat : FunctorSnap{ee
@@ -101,15 +106,27 @@ void test_on_path(std::string path){
     }*/
 
     std::vector< std::pair<size_t, size_t> > close_faces;
-    proximity_triangle_soup(points_triangle, faces_triangles, 1/(1024.*1024.), close_faces, false);
-    std::cout << "\n\nPair of non-adjacent close faces" << std::endl;
-    for(auto pair : close_faces){
-      std::cout << pair.first << " " << pair.second << std::endl;
-      std::cout << faces_triangles[pair.first][0] << " " << faces_triangles[pair.first][1] << " " << faces_triangles[pair.first][2] << std::endl;
-      std::cout << faces_triangles[pair.second][0] << " " << faces_triangles[pair.second][1] << " " << faces_triangles[pair.second][2] << std::endl;
-      std::cout << std::endl;      
+    CGAL::Real_timer timer;
+    timer.start();
+    proximity_triangle_soup<Kernel>(points_triangle, faces_triangles,  1/((float)1), close_faces, false);
+    timer.stop();
+    std::cout << "Timer Proximity Triangle Soup: " << timer.time() <<", Proximity faces size: " << close_faces.size() << std::endl;
+    timer.reset();
+    close_faces.clear();
+    timer.start();
+    proximity_triangle_soup_bis<Kernel>(points_triangle, faces_triangles, 1/((float)1), close_faces, false);
+    timer.stop();
+    std::cout << "Timer Proximity Triangle Soup: " << timer.time() <<", Proximity faces size: " << close_faces.size() << std::endl;
+    timer.reset();
+    if(0){
+      std::cout << "\n\nPair of non-adjacent close faces" << std::endl;
+      for(auto pair : close_faces){
+        std::cout << pair.first << " " << pair.second << std::endl;
+        std::cout << faces_triangles[pair.first][0] << " " << faces_triangles[pair.first][1] << " " << faces_triangles[pair.first][2] << std::endl;
+        std::cout << faces_triangles[pair.second][0] << " " << faces_triangles[pair.second][1] << " " << faces_triangles[pair.second][2] << std::endl;
+        std::cout << std::endl;      
+      }
     }
-    
 	} else{
 		std::cerr << "Not found: " << path << std::endl;
 	}

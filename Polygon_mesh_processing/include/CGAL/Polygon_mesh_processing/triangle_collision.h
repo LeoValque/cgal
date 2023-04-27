@@ -13,9 +13,9 @@
 #ifndef CGAL_POLYGON_MESH_PROCESSING_TRIANGLE_COLLISION_H
 #define CGAL_POLYGON_MESH_PROCESSING_TRIANGLE_COLLISION_H
 
+#include <CGAL/license/Polygon_mesh_processing/distance.h>
+
 #include <CGAL/Polygon_mesh_processing/distance.h>
-#include <CGAL/Triangulation_vertex_base_with_info_2.h>
-#include <CGAL/Constrained_Delaunay_triangulation_2.h>
 #include <CGAL/box_intersection_d.h>
 #include <CGAL/Exact_predicates_exact_constructions_kernel.h>
 
