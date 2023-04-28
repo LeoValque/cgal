@@ -457,6 +457,8 @@ compare_squared_distance(const typename K::Point_3 &p,
   return k.compare_squared_distance_3_object()(p, q, d2);
 }
 
+
+
 template < class K >
 inline
 typename K::Comparison_result

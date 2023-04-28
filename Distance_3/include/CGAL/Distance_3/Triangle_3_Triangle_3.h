@@ -213,6 +213,17 @@ squared_distance(const typename K::Triangle_3& tr1,
 #endif
 }
 
+template <typename K>
+typename K::Comparison_result
+compare_squared_distance(const typename K::Triangle_3& tr1,
+                         const typename K::Triangle_3& tr2,
+                         const typename K::FT squared_distance,
+                         const K& k)
+{
+  assert(false);
+  return EQUAL;
+}
+
 } // namespace internal
 
 template <class K>
@@ -223,6 +234,7 @@ squared_distance(const Triangle_3<K>& tr1,
 {
   return K().compute_squared_distance_3_object()(tr1, tr2);
 }
+
 
 } // namespace CGAL
 

@@ -839,6 +839,7 @@ namespace CommonKernelFunctors {
   class Compare_squared_distance_3
   {
     typedef typename K::FT                 FT;
+    typedef typename K::Triangle_3         Triangle_3;
   public:
     typedef typename K::Comparison_result  result_type;
 
@@ -847,6 +848,13 @@ namespace CommonKernelFunctors {
     operator()(const T1& p, const T2& q, const FT& d2) const
     {
       return CGAL::compare(internal::squared_distance(p, q, K()), d2);
+    }
+
+
+    Needs_FT<result_type>
+    operator()(const Triangle_3& t0, const Triangle_3& t, const FT& d2) const
+    {
+      return internal::compare_squared_distance(t0, t1, d2, K());
     }
 
     template <class T1, class T2, class T3, class T4>

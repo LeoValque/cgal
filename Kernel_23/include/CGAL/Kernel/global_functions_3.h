@@ -398,6 +398,16 @@ compare_squared_distance(const Point_3<K> &p,
 template < class K >
 inline
 typename K::Comparison_result
+compare_squared_distance(const Triangle_3<K> &t0,
+                         const Triangle_3<K> &t1,
+                         const typename K::FT &d2)
+{
+  return internal::compare_squared_distance(t0, t1, d2, K());
+}
+
+template < class K >
+inline
+typename K::Comparison_result
 compare_squared_radius(const Point_3<K> &p,
                        const typename K::FT &sr)
 {

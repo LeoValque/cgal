@@ -664,13 +664,17 @@ private:
       are_equal(CGAL::squared_distance(tr1, tr2), gte_res.sqrDistance);
 #endif
     }
+
+    P p(0,0,0);
+    T t(p,p,p);
+    CGAL::compare_squared_distance(t,t,1.0);
+
   }
 
 public:
   void run()
   {
     std::cout << "Kernel: " << typeid(K).name() << std::endl;
-
     P_P();
     P_S();
     P_R();
@@ -690,7 +694,6 @@ public:
 
     L_L();
     L_Pl();
-
     T_T();
 
     Pl_Pl();
