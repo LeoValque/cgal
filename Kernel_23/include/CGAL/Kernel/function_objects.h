@@ -852,9 +852,15 @@ namespace CommonKernelFunctors {
 
 
     Needs_FT<result_type>
-    operator()(const Triangle_3& t0, const Triangle_3& t, const FT& d2) const
+    operator()(const Triangle_3& t0, const Triangle_3& t1, const FT& d2) const
     {
       return internal::compare_squared_distance(t0, t1, d2, K());
+    }
+
+    Needs_FT<result_type>
+    disjoint(const Triangle_3& t0, const Triangle_3& t1, const FT& d2) const
+    {
+      return internal::compare_squared_distance_disjoint(t0, t1, d2, K());
     }
 
     template <class T1, class T2, class T3, class T4>

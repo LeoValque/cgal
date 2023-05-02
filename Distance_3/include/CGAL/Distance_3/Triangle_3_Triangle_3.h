@@ -19,6 +19,7 @@
 
 #include <CGAL/Distance_3/Point_3_Point_3.h>
 #include <CGAL/Distance_3/Segment_3_Segment_3.h>
+#include <CGAL/Intersections_3/Triangle_3_Triangle_3.h>
 
 #include <CGAL/Triangle_3.h>
 
@@ -215,13 +216,71 @@ squared_distance(const typename K::Triangle_3& tr1,
 
 template <typename K>
 typename K::Comparison_result
+compare_squared_distance_disjoint(const typename K::Triangle_3& tr1,
+                         const typename K::Triangle_3& tr2,
+                         const typename K::FT squared_distance,
+                         const K& k)
+{
+  typedef CGAL::Uncertain<Comparison_result> U; 
+
+  assert(!CGAL::do_intersect(tr1,tr2));
+
+  auto compare_squared_distance=[k](const auto A, auto B, const typename K::FT squared_distance){
+    return compare(internal::squared_distance(A,B,k), squared_distance);
+  };
+  
+  auto triangle_contains_projected_point=[](const typename K::Triangle_3 &tr, const typename K::Point_3 &p){
+    typename K::Point_3 p_project = tr.supporting_plane().projection(p);
+    return tr.has_on(p_project);
+  };
+
+  U tri_tri_result(CGAL::LARGER);
+  auto update_result=[]( U &res, const U u){
+    res = U( min(res.inf(),u.inf()), min(res.sup(),u.sup()));
+  };
+  //First, we check the distance between each pair of segments
+	//After, we check the distance between each vertex to the opposite triangle
+  for(int i=0; i<3; ++i){
+    //*
+    for(int j=0; j<3; ++j)
+      //If the distance between the lines is more than 3, the distance between the segments is more than 3 and thus, we not compute it.
+      //If the distance between the lines is less than 3, it is computed again in the distance between the segments but this gains a bit of time because 
+      //most pair of lines are at distance more than 3
+      if(compare_squared_distance(typename K::Line_3(tr1[i],tr1[(i+1)%3]), typename K::Line_3(tr2[j],tr2[(j+1)%3]),squared_distance)!=CGAL::LARGER){
+        U seg_seg_result(compare_squared_distance(typename K::Segment_3(tr1[i],tr1[(i+1)%3]), typename K::Segment_3(tr2[j],tr2[(j+1)%3]),squared_distance));
+        if(seg_seg_result.is_certain() && (seg_seg_result.make_certain()==CGAL::SMALLER))
+          return CGAL::SMALLER;
+        update_result(tri_tri_result, seg_seg_result);
+      }
+    //*
+    //If the distance to the plane is more than 3, the distance to the triangle is more than 3 and we exit.
+    //We already test that all edges are at distance more than 3 so we can simply test if the projection of the vertex is inside the triangle.
+    U pts_plane_result(compare_squared_distance(tr1.supporting_plane(),tr2[i],squared_distance));
+    if(CGAL::possibly(pts_plane_result!=CGAL::LARGER) && triangle_contains_projected_point(tr1,tr2[i])){
+      if(pts_plane_result.is_certain() && (pts_plane_result.make_certain()==CGAL::SMALLER))
+          return CGAL::SMALLER;
+        update_result(tri_tri_result, pts_plane_result);
+    }
+    pts_plane_result = compare_squared_distance(tr1[i],tr2.supporting_plane(),squared_distance);
+    if(CGAL::possibly(pts_plane_result!=CGAL::LARGER) && triangle_contains_projected_point(tr2,tr1[i])){
+      if(pts_plane_result.is_certain() && (pts_plane_result.make_certain()==CGAL::SMALLER))
+          return CGAL::SMALLER;
+        update_result(tri_tri_result, pts_plane_result);
+    }//*/
+  }
+  return tri_tri_result;
+}
+
+template <typename K>
+typename K::Comparison_result
 compare_squared_distance(const typename K::Triangle_3& tr1,
                          const typename K::Triangle_3& tr2,
                          const typename K::FT squared_distance,
                          const K& k)
 {
-  assert(false);
-  return EQUAL;
+  if(CGAL::do_intersect(tr1,tr2))
+    return CGAL::is_zero(squared_distance)?CGAL::EQUAL:CGAL::SMALLER;
+  return compare_squared_distance_disjoint(tr1,tr2,squared_distance,k);
 }
 
 } // namespace internal

@@ -35,10 +35,25 @@ bool triangle_has_on_projected_point(const typename Kernel::Triangle_3 &tr, cons
 }
 
 template <class Kernel>
+bool at_distance_one(const typename Kernel::Triangle_3 a, const typename Kernel::Triangle_3 b, const double r);
+
+template <class Kernel>
 bool at_distance_one_bis(const typename Kernel::Triangle_3 a, const typename Kernel::Triangle_3 b, const double r){
     typename Kernel::FT three_r(3*r);
     typename Kernel::Compare_squared_distance_3 compare_squared_distance;
     return CGAL::possibly(compare_squared_distance(a,b,three_r)==CGAL::SMALLER);
+	for(int i=0; i<2; ++i){
+		if(CGAL::do_intersect( typename Kernel::Segment_3(a[i],a[(i+1)%3]), b))
+			//return CGAL::is_zero(r)?CGAL::EQUAL,CGAL::SMALLER;
+			return true;
+		if(CGAL::do_intersect( a, typename Kernel::Segment_3(b[i],b[(i+1)%3])))
+			//return CGAL::is_zero(r)?CGAL::EQUAL,CGAL::SMALLER;
+			return true;
+	}
+	if(CGAL::do_intersect( a, typename Kernel::Segment_3(b[2],b[0])))
+		return true;
+
+	return at_distance_one<Kernel>(a,b,r);
 }
 
 //This function return true if two triangles are at L1-distance less than r. Being at L2-distance less than sqrt(3)*r implies the former.
@@ -47,7 +62,7 @@ template <class Kernel>
 bool at_distance_one(const typename Kernel::Triangle_3 a, const typename Kernel::Triangle_3 b, const double r){
     typename Kernel::Compare_squared_distance_3 compare_squared_distance;
     typename Kernel::FT three_r(3*r);
-
+	//return CGAL::possibly(compare_squared_distance.disjoint(a,b,three_r));
 	//First, we check the distance between each pair of segments
 	//After, we check the distance between each vertew to the opposite triangle
     for(int i=0; i<3; ++i){
