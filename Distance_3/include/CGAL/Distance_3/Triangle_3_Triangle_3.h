@@ -241,7 +241,6 @@ compare_squared_distance_disjoint(const typename K::Triangle_3& tr1,
   //First, we check the distance between each pair of segments
 	//After, we check the distance between each vertex to the opposite triangle
   for(int i=0; i<3; ++i){
-    //*
     for(int j=0; j<3; ++j)
       //If the distance between the lines is more than 3, the distance between the segments is more than 3 and thus, we not compute it.
       //If the distance between the lines is less than 3, it is computed again in the distance between the segments but this gains a bit of time because 
@@ -252,7 +251,6 @@ compare_squared_distance_disjoint(const typename K::Triangle_3& tr1,
           return CGAL::SMALLER;
         update_result(tri_tri_result, seg_seg_result);
       }
-    //*
     //If the distance to the plane is more than 3, the distance to the triangle is more than 3 and we exit.
     //We already test that all edges are at distance more than 3 so we can simply test if the projection of the vertex is inside the triangle.
     U pts_plane_result(compare_squared_distance(tr1.supporting_plane(),tr2[i],squared_distance));
@@ -266,7 +264,7 @@ compare_squared_distance_disjoint(const typename K::Triangle_3& tr1,
       if(pts_plane_result.is_certain() && (pts_plane_result.make_certain()==CGAL::SMALLER))
           return CGAL::SMALLER;
         update_result(tri_tri_result, pts_plane_result);
-    }//*/
+    }
   }
   return tri_tri_result;
 }

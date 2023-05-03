@@ -107,14 +107,16 @@ void test_on_path(std::string path){
 
     std::vector< std::pair<size_t, size_t> > close_faces;
     CGAL::Real_timer timer;
+    #if 0
     timer.start();
-    proximity_triangle_soup<Kernel>(points_triangle, faces_triangles,  1/((float)1), close_faces, false);
+    CGAL::Polygon_mesh_processing::proximity_triangle_soup_old<Kernel>(points_triangle, faces_triangles, Kernel::FT(1.), close_faces, false);
     timer.stop();
     std::cout << "Timer Proximity Triangle Soup: " << timer.time() <<", Proximity faces size: " << close_faces.size() << std::endl;
     timer.reset();
     close_faces.clear();
+    #endif
     timer.start();
-    proximity_triangle_soup_bis<Kernel>(points_triangle, faces_triangles, 1/((float)1), close_faces, false);
+    CGAL::Polygon_mesh_processing::proximity_pairs_in_triangles_soup<Kernel>(points_triangle, faces_triangles,  Kernel::FT(1.), close_faces, false, false);
     timer.stop();
     std::cout << "Timer Proximity Triangle Soup: " << timer.time() <<", Proximity faces size: " << close_faces.size() << std::endl;
     timer.reset();
@@ -136,13 +138,6 @@ int main(int argc, char *argv[]){
   std::cout.precision(17);
 
   //std::cout << argc << " " << argv[1] << " " << (argv[1]=="test_thingi") << " " << argv[2] << std::endl;
-  if(argc==3){
-  	//DEBUG_OUT;
-    if(std::string(argv[1])==std::string("run_on_thingi"))
-  	  test_on_path("../../data/Thingi10K/raw_meshes/"+std::string(argv[2]));
-    else
-      test_on_path(std::string(argv[2]));
-  	return 0;
-  }
+  test_on_path(std::string(argv[1]));
   return 0;
 }

@@ -850,7 +850,6 @@ namespace CommonKernelFunctors {
       return CGAL::compare(internal::squared_distance(p, q, K()), d2);
     }
 
-
     Needs_FT<result_type>
     operator()(const Triangle_3& t0, const Triangle_3& t1, const FT& d2) const
     {
