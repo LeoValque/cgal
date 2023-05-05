@@ -35,8 +35,13 @@
 //#include <CGAL/Polygon_mesh_processing/autorefinement.h>
 #include <CGAL/Simple_cartesian.h>
 
+typedef CGAL::Exact_predicates_exact_constructions_kernel Kernel;
+
 typedef CGAL::Simple_cartesian<double> Cartesian;
 typedef Cartesian::Point_3 Double_Point_3;
+typedef Kernel::Point_3 Point_3;
+
+const std::string name[4]={"X_MOVING", "Y_MOVING", "Z_MOVING", "COPLANAR"};
 
 double round_to_double(Kernel::FT a){
     a.set_relative_precision_of_to_double(1/std::pow(2,52));
@@ -51,14 +56,14 @@ double round_to_float(Kernel::FT a){
 }
 
 //*
-struct FunctorFloat : FunctorSnap{
-    Kernel::FT snap_FT(Kernel::FT x, size_t pi){
+struct FunctorFloat{
+    Kernel::FT operator()(Kernel::FT x, size_t pi) const{
         return round_to_float(x);
     }
 };
 
-struct FunctorDouble : FunctorSnap{
-    Kernel::FT snap_FT(Kernel::FT x, size_t pi){
+struct FunctorDouble{
+    Kernel::FT operator()(Kernel::FT x, size_t pi) const{
         return round_to_double(x);
     }
 };//*/
@@ -93,23 +98,31 @@ void test_on_path(std::string path){
     PMP::polygon_mesh_to_polygon_soup(mesh, points_triangle, faces_triangles);
     //exit(1);
   //*
-    std::vector<Intersection> out_intersection;
+    std::vector<CGAL::Polygon_mesh_processing::Collision> out_intersection;
     FunctorFloat snap;
     FunctorDouble snap2;
-	  check_intersections(points_triangle, faces_triangles, snap, out_intersection, true);
+	  CGAL::Polygon_mesh_processing::detect_collisions_during_motion<Kernel>(points_triangle, faces_triangles, snap, out_intersection, true);
     //check_intersections(points_triangle, faces_triangles, snap, out_intersection, true);
 
 
     std::cout << "Number of Intersection: " << out_intersection.size() << std::endl;
     for(auto &intersection : out_intersection){
-      if(intersection.is_edge_edge){
-        std::cout << "Intersection between edges: " << intersection.ei1.first << "->" << intersection.ei1.second << " , " << intersection.ei2.first << "->" << intersection.ei2.second << " during " << static_cast<int> (intersection.intersectionDuring) << std::endl;
-        std::cout << points_triangle[intersection.ei1.first] << " -> " << points_triangle[intersection.ei1.second] << std::endl;
-        std::cout << points_triangle[intersection.ei2.first] << " -> " << points_triangle[intersection.ei2.second] << "\n" << std::endl;
+      if(intersection.type == CGAL::Polygon_mesh_processing::CollisionType::VERTEX_VERTEX){
+        auto &info = std::get<CGAL::Polygon_mesh_processing::VertexVertexInfo>(intersection.info);
+        std::cout << "Intersection between vertices: " << info.p1 << " , " << info.p2 << " during " << name[static_cast<int>(intersection.collideDuring)] << std::endl;
+        std::cout << points_triangle[info.p1] << "\n";
+        std::cout << points_triangle[info.p2] << "\n" << std::endl;
+      } else if(intersection.type == CGAL::Polygon_mesh_processing::CollisionType::EDGE_EDGE) {
+      //if(intersection.is_edge_edge){
+        auto &info = std::get<CGAL::Polygon_mesh_processing::EdgeEdgeInfo>(intersection.info);
+        std::cout << "Intersection between edges: " << info.ei1.first << "->" << info.ei1.second << " , " << info.ei2.first << "->" << info.ei2.second << " during " << name[static_cast<int> (intersection.collideDuring)] << std::endl;
+        std::cout << points_triangle[info.ei1.first] << " -> " << points_triangle[info.ei1.second] << std::endl;
+        std::cout << points_triangle[info.ei2.first] << " -> " << points_triangle[info.ei2.second] << "\n" << std::endl;
       } else {
-        std::cout << "Intersection between a face and a vertex: " << intersection.pi << " , " << intersection.fi << ": "<< faces_triangles[intersection.fi][0] << "->" << faces_triangles[intersection.fi][1] << "->" << faces_triangles[intersection.fi][2] << " during " << static_cast<int>(intersection.intersectionDuring) << std::endl;
-        std::cout << points_triangle[faces_triangles[intersection.fi][0]] << " -> " << points_triangle[faces_triangles[intersection.fi][1]] << " -> " << points_triangle[faces_triangles[intersection.fi][2]] << std::endl;
-        std::cout << points_triangle[intersection.pi] << "\n" << std::endl;
+        auto &info = std::get<CGAL::Polygon_mesh_processing::VertexTriangleInfo>(intersection.info);
+        std::cout << "Intersection between a face and a vertex: " << info.pi << " , " << info.fi << ": "<< faces_triangles[info.fi][0] << "->" << faces_triangles[info.fi][1] << "->" << faces_triangles[info.fi][2] << " during " << name[static_cast<int>(intersection.collideDuring)] << std::endl;
+        std::cout << points_triangle[faces_triangles[info.fi][0]] << " -> " << points_triangle[faces_triangles[info.fi][1]] << " -> " << points_triangle[faces_triangles[info.fi][2]] << std::endl;
+        std::cout << points_triangle[info.pi] << "\n" << std::endl;
       }
     }//*/
 
