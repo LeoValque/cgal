@@ -41,14 +41,14 @@ public:
 				}
 
 		typename Kernel::Compare_squared_distance_3 compare_squared_distance;
-		if(compare_squared_distance(typename Kernel::Triangle_3((*points)[vector_a[0]], (*points)[vector_a[1]], (*points)[vector_a[2]]), 
+		if(compare_squared_distance(typename Kernel::Triangle_3((*points)[vector_a[0]], (*points)[vector_a[1]], (*points)[vector_a[2]]),
                            typename Kernel::Triangle_3((*points)[vector_b[0]], (*points)[vector_b[1]], (*points)[vector_b[2]]), r)==CGAL::SMALLER)
 			outs->emplace_back(*(a.handle()), *(b.handle()));
     }
 
 	const std::vector<typename Kernel::Point_3> *points;
 	const std::vector< std::vector<size_t> > *triangles;
-	typename Kernel::FT r; 
+	typename Kernel::FT r;
 	std::vector< std::pair<size_t, size_t> > *outs;
 	bool cAdja;
 };
@@ -58,7 +58,7 @@ void proximity_pairs_in_triangles_soup(const std::vector<typename Kernel::Point_
     auto extend=[](Bbox_3 b, double a){
 		return Bbox_3(b.xmin(), b.ymin(), b.zmin(), b.xmax()+a, b.ymax()+a, b.zmax()+a);
 	};
-	
+
 	std::vector<size_t> triangleIDs(triangles.size());
 	for(size_t i=0; i!=triangles.size(); ++i)
 		triangleIDs[i]=i;
@@ -93,14 +93,14 @@ public:
 						outs->emplace_back(*(a.handle()), *(b.handle()));
 					return;
 				}
-		if(CGAL::possibly(CGAL::compare( CGAL::squared_distance(typename Kernel::Triangle_3((*points)[vector_a[0]], (*points)[vector_a[1]], (*points)[vector_a[2]]), 
+		if(CGAL::possibly(CGAL::compare( CGAL::squared_distance(typename Kernel::Triangle_3((*points)[vector_a[0]], (*points)[vector_a[1]], (*points)[vector_a[2]]),
                                typename Kernel::Triangle_3((*points)[vector_b[0]], (*points)[vector_b[1]], (*points)[vector_b[2]])), r)==CGAL::SMALLER))
 			outs->emplace_back(*(a.handle()), *(b.handle()));
     }
 
 	const std::vector<typename Kernel::Point_3> *points;
 	const std::vector< std::vector<size_t> > *triangles;
-	typename Kernel::FT r; 
+	typename Kernel::FT r;
 	std::vector< std::pair<size_t, size_t> > *outs;
 	bool cAdja;
 };
@@ -110,7 +110,7 @@ void proximity_triangle_soup_old(const std::vector<typename Kernel::Point_3> &po
     auto extend=[](Bbox_3 b, double a){
 		return Bbox_3(b.xmin(), b.ymin(), b.zmin(), b.xmax()+a, b.ymax()+a, b.zmax()+a);
 	};
-	
+
 	std::vector<size_t> triangleIDs(triangles.size());
 	for(size_t i=0; i!=triangles.size(); ++i)
 		triangleIDs[i]=i;

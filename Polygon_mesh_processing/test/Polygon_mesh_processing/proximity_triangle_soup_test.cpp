@@ -61,7 +61,7 @@ void test_on_path(std::string path){
     std::vector< Double_Point_3 > double_points_triangle;
 	std::vector< std::vector<size_t> > faces_triangles;
     std::cout << path  << std::endl;
-  
+
 	if(CGAL::IO::read_polygon_soup(path,double_points_triangle, faces_triangles)){
     PMP::repair_polygon_soup(double_points_triangle, faces_triangles);
     CGAL::Surface_mesh<Point_3> mesh;
@@ -126,7 +126,7 @@ void test_on_path(std::string path){
         std::cout << pair.first << " " << pair.second << std::endl;
         std::cout << faces_triangles[pair.first][0] << " " << faces_triangles[pair.first][1] << " " << faces_triangles[pair.first][2] << std::endl;
         std::cout << faces_triangles[pair.second][0] << " " << faces_triangles[pair.second][1] << " " << faces_triangles[pair.second][2] << std::endl;
-        std::cout << std::endl;      
+        std::cout << std::endl;
       }
     }
 	} else{

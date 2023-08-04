@@ -83,20 +83,20 @@ typedef CGAL::Box_intersection_d::Box_with_handle_d<double,3, std::set< Paramete
 
 template<class K>
 struct Functor_points_collide{
-	Functor_points_collide(std::vector< typename K::Point_3> *points_, 
-	                       std::vector< std::vector<size_t>> *triangles_, 
+	Functor_points_collide(std::vector< typename K::Point_3> *points_,
+	                       std::vector< std::vector<size_t>> *triangles_,
 						   std::vector< Collision > *out_collision_,
 	                       std::vector< typename K::Point_3 > *points_move_x_,
 						   std::vector< typename K::Point_3 > *points_move_y_,
 						   std::vector< typename K::Point_3 > *points_move_z_)
 						  :points(points_),
-						   triangles(triangles_), 
+						   triangles(triangles_),
 						   out_collision(out_collision_),
 						   points_move_x(points_move_x_),
 						   points_move_y(points_move_y_),
 						   points_move_z(points_move_z_){}
-	
-	void operator()(const Face_Vertex_Box& a_box, const Face_Vertex_Box& b_box) {		
+
+	void operator()(const Face_Vertex_Box& a_box, const Face_Vertex_Box& b_box) {
 		P_index pa = a_box.handle()->vertex_parameter;
 		P_index pb = b_box.handle()->vertex_parameter;
 
@@ -118,25 +118,25 @@ struct Functor_points_collide{
 
 template<class K>
 struct Functor_edge_collide{
-	Functor_edge_collide(std::vector< typename K::Point_3> *points_, 
-	                       std::vector< std::vector<size_t>> *triangles_, 
+	Functor_edge_collide(std::vector< typename K::Point_3> *points_,
+	                       std::vector< std::vector<size_t>> *triangles_,
 						   std::vector< Collision > *out_collision_,
 	                       std::vector< typename K::Point_3 > *points_move_x_,
 						   std::vector< typename K::Point_3 > *points_move_y_,
-						   std::vector< typename K::Point_3 > *points_move_z_, 
+						   std::vector< typename K::Point_3 > *points_move_z_,
 						   bool simplicialComplexOption_)
 						  :points(points_),
-						   triangles(triangles_), 
+						   triangles(triangles_),
 						   out_collision(out_collision_),
 						   points_move_x(points_move_x_),
 						   points_move_y(points_move_y_),
-						   points_move_z(points_move_z_), 
+						   points_move_z(points_move_z_),
 						   simplicialComplexOption(simplicialComplexOption_){}
-	
-	void operator()(const Edge_Box& a_box, const Edge_Box& b_box) {		
+
+	void operator()(const Edge_Box& a_box, const Edge_Box& b_box) {
 		Parameter_Edge a = *(a_box.handle());
 		Parameter_Edge b = *(b_box.handle());
-		
+
 		MotionStep collideDuring;
 		if(does_edge_edge_collide(a.first, a.second, b.first, b.second, collideDuring, simplicialComplexOption)){
 			out_collision->emplace_back(CollisionType::EDGE_EDGE, collideDuring, EdgeEdgeInfo(std::pair<size_t,size_t> (a.first, a.second),
@@ -146,7 +146,7 @@ struct Functor_edge_collide{
 
 	bool does_edge_edge_collide(size_t a1, size_t a2, size_t b1, size_t b2, MotionStep &collideDuring, bool simplicialComplexOption);
 
-	
+
 	std::vector< typename K::Point_3 > *points_move_x;
 	std::vector< typename K::Point_3 > *points_move_y;
 	std::vector< typename K::Point_3 > *points_move_z;
@@ -158,19 +158,19 @@ struct Functor_edge_collide{
 
 template<class K>
 struct Functor_face_collide{
-	Functor_face_collide(std::vector< typename K::Point_3> *points_, 
-	                       std::vector< std::vector<size_t>> *triangles_, 
+	Functor_face_collide(std::vector< typename K::Point_3> *points_,
+	                       std::vector< std::vector<size_t>> *triangles_,
 						   std::vector< Collision > *out_collision_,
 	                       std::vector< typename K::Point_3 > *points_move_x_,
 						   std::vector< typename K::Point_3 > *points_move_y_,
-						   std::vector< typename K::Point_3 > *points_move_z_, 
+						   std::vector< typename K::Point_3 > *points_move_z_,
 						   bool simplicialComplexOption_)
 						  :points(points_),
-						   triangles(triangles_), 
+						   triangles(triangles_),
 						   out_collision(out_collision_),
 						   points_move_x(points_move_x_),
 						   points_move_y(points_move_y_),
-						   points_move_z(points_move_z_), 
+						   points_move_z(points_move_z_),
 						   simplicialComplexOption(simplicialComplexOption_){}
 
 	void operator()(const Face_Vertex_Box& p_box, const Face_Vertex_Box& tr_box){
@@ -184,7 +184,7 @@ struct Functor_face_collide{
 	}
 
 	bool does_vertex_triangle_collide(size_t t1, size_t t2, size_t t3, size_t v, MotionStep &collideDuring, bool simplicialComplexOption);
-	
+
 	std::vector< typename K::Point_3 > *points_move_x;
 	std::vector< typename K::Point_3 > *points_move_y;
 	std::vector< typename K::Point_3 > *points_move_z;
@@ -199,18 +199,18 @@ bool seg_do_intersect(const typename K::Segment_2 s1, const typename K::Segment_
 	if(simplicialComplexOption){
 		//if(CGAL::do_intersect(s1, s2.start()) || CGAL::do_intersect(s1, s2.end()) || CGAL::do_intersect(s2, s1.start()) || CGAL::do_intersect(s2, s1.end()) || CGAL::do_intersect(s1,s2))
 		return CGAL::do_intersect(s1,s2);
-		 
+
 	} else if(CGAL::do_intersect(s1, s2.start()) || CGAL::do_intersect(s1, s2.end()) || CGAL::do_intersect(s2, s1.start()) || CGAL::do_intersect(s2, s1.end()) ){
 			return false;
 		} else {
 			return CGAL::do_intersect(s1,s2);
 		}
-		
+
 }
 
 template<class K>
 bool seg_do_intersect(const typename K::Segment_3 s1, const typename K::Segment_3 s2, bool simplicialComplexOption){
-	
+
     if(simplicialComplexOption){
 		if(s1.is_degenerate())
 			if(s2.is_degenerate())
@@ -238,10 +238,10 @@ bool Functor_points_collide<K>::does_vertices_collide(size_t pia, size_t pib, Mo
   };
   auto on_backwall=[](typename K::Point_3 &p){
 	return typename K::Point_2(p.x(), p.z());
-  };	
+  };
   auto on_sidewall=[](typename K::Point_3 &p){
 	return typename K::Point_2(p.y(), p.z());
-  };	
+  };
 
   std::array<typename K::Point_3, 4> pa = {(*points)[pia],(*points_move_x)[pia],(*points_move_y)[pia],(*points_move_z)[pia]};
   std::array<typename K::Point_3, 4> pb = {(*points)[pib],(*points_move_x)[pib],(*points_move_y)[pib],(*points_move_z)[pib]};
@@ -254,9 +254,9 @@ bool Functor_points_collide<K>::does_vertices_collide(size_t pia, size_t pib, Mo
 	if(comp_bef!=comp_aft && comp_aft!=EQUAL){
 		collideDuring=MotionStep::X_MOVING;
   		return true;
-	}  
+	}
   }
-  
+
   //move on y
   if(equal(on_backwall(pa[1]),on_backwall(pb[1]))){
 	auto comp_bef=compare_y(pa[1],pb[1]);
@@ -264,9 +264,9 @@ bool Functor_points_collide<K>::does_vertices_collide(size_t pia, size_t pib, Mo
 	if(comp_bef!=comp_aft && comp_aft!=EQUAL){
 		collideDuring=MotionStep::Y_MOVING;
   		return true;
-	}  
+	}
   }
-  
+
   //move on z
   if(equal(on_floor(pa[2]),on_floor(pb[2]))){
 	auto comp_bef=compare_z(pa[2],pb[2]);
@@ -274,7 +274,7 @@ bool Functor_points_collide<K>::does_vertices_collide(size_t pia, size_t pib, Mo
 	if(comp_bef!=comp_aft && comp_aft!=EQUAL){
 		collideDuring=MotionStep::Z_MOVING;
   		return true;
-	}  
+	}
   }
   return false;
 }
@@ -294,7 +294,7 @@ bool Functor_face_collide<K>::does_vertex_triangle_collide(size_t t1, size_t t2,
   CGAL::Orientation orientation_x = CGAL::orientation(px[0],px[1],px[2],px[3]);
   CGAL::Orientation orientation_y = CGAL::orientation(py[0],py[1],py[2],py[3]);
   CGAL::Orientation orientation_z = CGAL::orientation(pz[0],pz[1],pz[2],pz[3]);
-  
+
   typename K::Triangle_3 tr(p[0], p[1], p[2]);
   typename K::Triangle_2 tr_on_x (typename K::Point_2(p[0].y(),p[0].z())  ,typename K::Point_2(p[1].y(),p[1].z())  ,typename K::Point_2(p[2].y(),p[2].z()));
   typename K::Triangle_2 trx_on_y(typename K::Point_2(px[0].x(),px[0].z()),typename K::Point_2(px[1].x(),px[1].z()),typename K::Point_2(px[2].x(),px[2].z()));
@@ -308,28 +308,28 @@ bool Functor_face_collide<K>::does_vertex_triangle_collide(size_t t1, size_t t2,
 	  collideDuring=MotionStep::X_MOVING;
 	  return true;
   }
-  
+
   //move on y
   if(orientation_y != COPLANAR &&
      orientation_y != orientation_x &&
      trx_on_y.bounded_side( typename K::Point_2(px[3].x(),px[3].z())) != ON_UNBOUNDED_SIDE &&
-     (orientation_x != COPLANAR || 
+     (orientation_x != COPLANAR ||
 	 (orientation_begin != COPLANAR && orientation_begin != orientation_y))){
 	collideDuring=MotionStep::Y_MOVING;
 	return true;
   }
-  
+
   //move on z
   if(orientation_z != CGAL::COPLANAR &&
   	orientation_z != orientation_y &&
   	try_on_z.bounded_side(typename K::Point_2(py[3].x(),py[3].y())) != ON_UNBOUNDED_SIDE &&
-  	(orientation_y != CGAL::COPLANAR || 
-		(orientation_x != CGAL::COPLANAR && orientation_x != orientation_z) || 
+  	(orientation_y != CGAL::COPLANAR ||
+		(orientation_x != CGAL::COPLANAR && orientation_x != orientation_z) ||
 		(orientation_x == CGAL::COPLANAR && orientation_begin != CGAL::COPLANAR && orientation_begin != orientation_z))){
 	collideDuring=MotionStep::Z_MOVING;
   	return true;
-  }	
-  	
+  }
+
   //move epsilon
   if(simplicialComplexOption &&
     orientation_z == COPLANAR &&
@@ -338,7 +338,7 @@ bool Functor_face_collide<K>::does_vertex_triangle_collide(size_t t1, size_t t2,
 	collideDuring=MotionStep::COPLANAR;
   	return true;
   }//*/
-  
+
   return false;
 }
 
@@ -367,7 +367,7 @@ bool Functor_edge_collide<K>::does_edge_edge_collide(size_t a1, size_t a2, size_
 	if(seg_do_intersect<K>(a_on_x,b_on_x,simplicialComplexOption))
 	{
 		collideDuring=MotionStep::X_MOVING;
-		return true;  
+		return true;
 	}
   }
 
@@ -388,8 +388,8 @@ bool Functor_edge_collide<K>::does_edge_edge_collide(size_t a1, size_t a2, size_
   //move on z
   if(orientation_z != CGAL::COPLANAR &&
   	 orientation_z != orientation_y &&
-  	(orientation_y != CGAL::COPLANAR || 
-		(orientation_x != CGAL::COPLANAR && orientation_x != orientation_z) || 
+  	(orientation_y != CGAL::COPLANAR ||
+		(orientation_x != CGAL::COPLANAR && orientation_x != orientation_z) ||
 		(orientation_x == CGAL::COPLANAR && orientation_begin != CGAL::COPLANAR && orientation_begin != orientation_z)))
   {
 
@@ -450,7 +450,7 @@ bool detect_collisions_during_motion(std::vector<typename K::Point_3> &points, s
 	auto triangle_bbox=[motion, extending_bbox](std::vector<size_t> &tr, std::vector<typename K::Point_3> &points){
 		return extending_bbox(points[tr[0]],tr[0])+extending_bbox(points[tr[1]],tr[1])+extending_bbox(points[tr[2]],tr[2]);
 	};
-	
+
 	std::vector< internal::Parameter_Face_Vertex > face_parameters;
 	std::set< internal::Parameter_Edge > edge_parameters;
 	std::vector< internal::Parameter_Face_Vertex > vertex_parameters;
@@ -491,16 +491,16 @@ bool detect_collisions_during_motion(std::vector<typename K::Point_3> &points, s
 	std::vector< internal::Face_Vertex_Box > face_boxes;
 	std::vector< internal::Edge_Box > edge_boxes;
 	std::vector< internal::Face_Vertex_Box > vertex_boxes;
-	
+
 	for(auto it=face_parameters.begin(); it!=face_parameters.end(); ++it){
 		face_boxes.emplace_back(triangle_bbox(triangles[it->is_face_parameter], points), it);
 	}
 	for(auto it=vertex_parameters.begin(); it!=vertex_parameters.end(); ++it)
 		vertex_boxes.emplace_back(extending_bbox(points[it->vertex_parameter], it->vertex_parameter), it);
-	
+
 	for(auto it=edge_parameters.begin(); it!=edge_parameters.end(); ++it)
 		edge_boxes.emplace_back(extending_bbox(points[it->first], it->first)+extending_bbox(points[it->second], it->second), it);
-		
+
 	internal::Functor_edge_collide<K> functor1(&points, &triangles, &out_collision, &points_move_x, &points_move_y, &points_move_z, simplicialComplexOption);
     CGAL::box_self_intersection_d( edge_boxes.begin(), edge_boxes.end(), functor1);
     internal::Functor_face_collide<K> functor2(&points, &triangles, &out_collision,  &points_move_x, &points_move_y, &points_move_z, simplicialComplexOption);

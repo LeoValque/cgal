@@ -221,14 +221,14 @@ compare_squared_distance_disjoint(const typename K::Triangle_3& tr1,
                          const typename K::FT squared_distance,
                          const K& k)
 {
-  typedef CGAL::Uncertain<Comparison_result> U; 
+  typedef CGAL::Uncertain<Comparison_result> U;
 
   assert(!CGAL::do_intersect(tr1,tr2));
 
   auto compare_squared_distance=[k](const auto A, auto B, const typename K::FT squared_distance){
     return compare(internal::squared_distance(A,B,k), squared_distance);
   };
-  
+
   auto triangle_contains_projected_point=[](const typename K::Triangle_3 &tr, const typename K::Point_3 &p){
     typename K::Point_3 p_project = tr.supporting_plane().projection(p);
     return tr.has_on(p_project);
@@ -243,7 +243,7 @@ compare_squared_distance_disjoint(const typename K::Triangle_3& tr1,
   for(int i=0; i<3; ++i){
     for(int j=0; j<3; ++j)
       //If the distance between the lines is more than 3, the distance between the segments is more than 3 and thus, we not compute it.
-      //If the distance between the lines is less than 3, it is computed again in the distance between the segments but this gains a bit of time because 
+      //If the distance between the lines is less than 3, it is computed again in the distance between the segments but this gains a bit of time because
       //most pair of lines are at distance more than 3
       if(compare_squared_distance(typename K::Line_3(tr1[i],tr1[(i+1)%3]), typename K::Line_3(tr2[j],tr2[(j+1)%3]),squared_distance)!=CGAL::LARGER){
         U seg_seg_result(compare_squared_distance(typename K::Segment_3(tr1[i],tr1[(i+1)%3]), typename K::Segment_3(tr2[j],tr2[(j+1)%3]),squared_distance));
