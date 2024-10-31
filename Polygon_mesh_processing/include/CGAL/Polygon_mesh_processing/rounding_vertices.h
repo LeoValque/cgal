@@ -20,14 +20,9 @@
 #include <CGAL/Polygon_mesh_processing/repair_polygon_soup.h>
 #include <boost/core/bit.hpp>
 
-
-#define CGAL_LINKED_WITH_TBB
-
 #ifdef CGAL_LINKED_WITH_TBB
 #include <tbb/parallel_for.h>
 #endif
-
-#define CGAL_PMP_ROUNDING_VERTICES_USE_DEFAULT_VERBOSE
 
 #ifdef CGAL_PMP_ROUNDING_VERTICES_USE_DEFAULT_VERBOSE
 #define CGAL_PMP_ROUNDING_VERTICES_VERBOSE(X) std::cout << X << "\n";
@@ -128,6 +123,72 @@ namespace internal{
 
 }
 
+template <class PointRange, class TriangleRange, class NamedParameters = parameters::Default_named_parameters>
+bool does_triangle_soup_fit_in_double(PointRange& soup_points,
+                              TriangleRange& soup_triangles,
+                              const NamedParameters& np = parameters::default_values())
+{
+
+}
+
+/**
+*
+* Refines a soup of triangles and round the coordinates of the vertices so that no pair of triangles intersects and all the coordinates fit in double. 
+* The function iterates as long as self-intersection occurs or the max number of iteration is reached.
+* Output triangles may share a common edge or a common vertex (but with the same indexed position in `points`).
+* Note that the function calls repair_polygon_soup and thus the point and polygon containers will be modified by the repairing operations, and thus the indexing of the polygons will also be changed.
+* Note that the output is not guarantee to be intersection free.
+*
+* @tparam PointRange a model of the concept `RandomAccessContainer`
+* whose value type is the point type
+* @tparam TriangleRange a model of the concepts `RandomAccessContainer`, `BackInsertionSequence` and `Swappable`, whose
+* value type is a model of the concept `RandomAccessContainer` whose value type is convertible to `std::size_t` and that
+* is constructible from an `std::initializer_list<std::size_t>` of size 3.
+* @tparam NamedParameters a sequence of \ref bgl_namedparameters "Named Parameters"
+*
+* @param soup_points points of the soup of polygons
+* @param soup_triangles each element in the range describes a triangle using the indexed position of the points in `soup_points`
+* @param np an optional sequence of \ref bgl_namedparameters "Named Parameters" among the ones listed below
+*
+* \cgalNamedParamsBegin
+*   \cgalParamNBegin{concurrency_tag}
+*     \cgalParamDescription{a tag indicating if the task should be done using one or several threads.}
+*     \cgalParamType{Either `CGAL::Sequential_tag`, or `CGAL::Parallel_tag`, or `CGAL::Parallel_if_available_tag`}
+*     \cgalParamDefault{`CGAL::Sequential_tag`}
+*   \cgalParamNEnd
+*   \cgalParamNBegin{point_map}
+*     \cgalParamDescription{a property map associating points to the elements of the range `soup_points`}
+*     \cgalParamType{a model of `ReadWritePropertyMap` whose value type is a point type}
+*     \cgalParamDefault{`CGAL::Identity_property_map`}
+*   \cgalParamNEnd
+*   \cgalParamNBegin{geom_traits}
+*     \cgalParamDescription{an instance of a geometric traits class}
+*     \cgalParamType{a class model of `Kernel`}
+*     \cgalParamDefault{a \cgal Kernel deduced from the point type, using `CGAL::Kernel_traits`}
+*     \cgalParamExtra{The geometric traits class must be compatible with the point type.}
+*   \cgalParamNEnd
+*   \cgalParamNBegin{max_nb_iteration}
+*     \cgalParamDescription{The maximum number of iteration}
+*     \cgalParamType{size_t}
+*     \cgalParamDefault{20}
+*   \cgalParamNEnd
+*   \cgalParamNBegin{rounding_precision}
+*     \cgalParamDescription{Number of digits conserved during each iteration of the rounding process}
+*     \cgalParamType{size_t}
+*     \cgalParamDefault{23}
+*     \cgalParamExtra{The value must be lower than 52 (number of digits of a mantissa). A higher value reduce the distance between a point and its rounding value but increase the chance of the output to be self-intersecting}
+*   \cgalParamNEnd
+* \cgalParamNBegin{exact_rounding}
+*     \cgalParamDescription{Compute the exact value before to round a coordinate giving guarantee on the distance between a point and its rounding value.}
+*     \cgalParamType{bool}
+*     \cgalParamDefault{false}
+*     \cgalParamExtra{The number type must be Lazy_exact_NT< T >}
+*   \cgalParamNEnd
+* \cgalNamedParamsEnd
+*
+* @return true if the output is intersection free, false if not
+*/
+
 template <class K, class PointRange, class TriangleRange, class NamedParameters = parameters::Default_named_parameters>
 bool round_vertices_triangle_soup(PointRange& soup_points,
                               TriangleRange& soup_triangles,
@@ -136,19 +197,31 @@ bool round_vertices_triangle_soup(PointRange& soup_points,
     using parameters::choose_parameter;
     using parameters::get_parameter;
 
-    //size_t nb_iter = choose_parameter<Max_nb_rounding_iteration>(get_parameter(np, internal_np::max_nb_rounding_iteration));
-    //size_t nb_iter = choose_parameter<Rounding_precision>(get_parameter(np, internal_np::rounding_precision));
-    size_t nb_iter=20;
-    size_t nb_bits=15;
-
     typedef std::vector< std::pair<std::size_t,std::size_t> > TriangleIdPairOutputVector;
     typedef std::size_t Input_TID;
     typedef std::size_t Input_VID;
     typedef std::pair<Input_TID, Input_TID> Pair_of_triangle_ids;
 
+    typedef typename internal_np::Lookup_named_param_def <
+        internal_np::concurrency_tag_t,
+        NamedParameters,
+        Sequential_tag
+    > ::type Concurrency_tag;
+    
+    constexpr bool parallel_execution = std::is_same_v<Parallel_tag, Concurrency_tag>;
+
+    //TODO
+    //constexpr size_t nb_iter = choose_parameter<Max_nb_rounding_iteration>(get_parameter(np, internal_np::max_nb_rounding_iteration));
+    //constexpr size_t nb_bits = choose_parameter<Rounding_precision>(get_parameter(np, internal_np::rounding_precision));
+    //constexpr bool exact_rounding = choose_parameter<Exact_rounding>(get_parameter(np, internal_np::rounding_precision));
+    constexpr size_t nb_iter=20;
+    constexpr size_t nb_bits=23;
+    constexpr bool exact_rounding=false;
+
     //Compute the largest absolute value on each coordinate and take the smallest above power of two for each coordinate
+    CGAL_PMP_ROUNDING_VERTICES_VERBOSE("compute scaling of the coordinates")
     Bbox_3 bb=bbox_3(soup_points.begin(), soup_points.end());
-    auto exponent = [](double v){
+    auto exponent = [](const double v){
         int n;
         frexp(v, &n);
         return n;
@@ -160,13 +233,25 @@ bool round_vertices_triangle_soup(PointRange& soup_points,
                                    std::pow(2.,nb_bits-exponent(max[1])),
                                    std::pow(2.,nb_bits-exponent(max[2]))};
 
+    CGAL_PMP_ROUNDING_VERTICES_VERBOSE("start the while loop")
 	for(size_t k=0; k<nb_iter; ++k)
     {
+        CGAL_PMP_ROUNDING_VERTICES_VERBOSE("start iteration " << (k+1))
+
         //Round all coordinates on doubles
-		for(typename K::Point_3 &p : soup_points)
-			p=internal::round_coordinates_to_double<K>(p);
+        CGAL_PMP_ROUNDING_VERTICES_VERBOSE("Round coordinates")
+        if(exact_rounding)
+        {
+            // TODO Need Lazy exact, to be put in the code only if exact_rounding is true
+            // for(typename K::Point_3 &p : soup_points)
+			//     p=typename K::Point_3(to_double(p.x().exact()), to_double(p.y().exact()), to_double(p.z().exact()));
+        } else {
+		    for(typename K::Point_3 &p : soup_points)
+			    p=typename K::Point_3(to_double(p.x()), to_double(p.y()), to_double(p.z()));
+        }
 
         //Compute pair of intersecting triangles
+        CGAL_PMP_ROUNDING_VERTICES_VERBOSE("Compute pairs of intersecting triangles")
 		std::vector<Pair_of_triangle_ids> si_pairs;
         repair_polygon_soup(soup_points, soup_triangles, np);
 		triangle_soup_self_intersections(soup_points, soup_triangles, std::back_inserter(si_pairs), np);
@@ -174,6 +259,12 @@ bool round_vertices_triangle_soup(PointRange& soup_points,
         //If not intersection, it is terminate.
 		if(si_pairs.empty())
         {
+            #ifndef CGAL_NDEBUG
+            CGAL_PMP_ROUNDING_VERTICES_VERBOSE("check soup");
+            CGAL_assertion( does_triangle_soup_fit_in_double(soup_points, soup_triangles) );
+            CGAL_assertion( !does_triangle_soup_self_intersect<Concurrency_tag>(soup_points, soup_triangles) );
+            #endif
+            CGAL_PMP_ROUNDING_VERTICES_VERBOSE("Done")
 			return true;
 		}
 
@@ -190,10 +281,12 @@ bool round_vertices_triangle_soup(PointRange& soup_points,
 			}
 		}
 
-        //Round coordinates of vertices nearby interecting ones to the integer grid
+        //Round coordinates of the vertices of the intersecting triangles and the vertices nearby them to the integer grid
+        CGAL_PMP_ROUNDING_VERTICES_VERBOSE("Snap the well-chosen vertices")
 		internal::snap_nearby_vertices<K>(soup_points, inter_points, scale);
 
         //Refine self-intersections
+        CGAL_PMP_ROUNDING_VERTICES_VERBOSE("Refine self-intersections")
 		repair_polygon_soup(soup_points, soup_triangles, np);
 		autorefine_triangle_soup(soup_points, soup_triangles, np);
 	}
