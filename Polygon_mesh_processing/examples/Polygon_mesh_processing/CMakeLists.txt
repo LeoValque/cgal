@@ -55,6 +55,7 @@ create_single_source_cgal_program("hausdorff_bounded_error_distance_example.cpp"
 create_single_source_cgal_program("isotropic_remeshing_with_custom_sizing_example.cpp")
 create_single_source_cgal_program("triangle_mesh_autorefinement.cpp")
 create_single_source_cgal_program("soup_autorefinement.cpp")
+create_single_source_cgal_program("soup_rounding_vertices.cpp")
 
 find_package(Eigen3 3.2.0 QUIET) #(requires 3.2.0 or greater)
 include(CGAL_Eigen3_support)
@@ -136,6 +137,7 @@ if(TARGET CGAL::TBB_support)
   target_link_libraries(hausdorff_distance_remeshing_example PUBLIC CGAL::TBB_support)
   target_link_libraries(hausdorff_bounded_error_distance_example PUBLIC CGAL::TBB_support)
   target_link_libraries(soup_autorefinement PUBLIC CGAL::TBB_support)
+  target_link_libraries(soup_rounding_vertices PUBLIC CGAL::TBB_support)
 
   create_single_source_cgal_program("corefinement_parallel_union_meshes.cpp")
   target_link_libraries(corefinement_parallel_union_meshes PUBLIC CGAL::TBB_support)
