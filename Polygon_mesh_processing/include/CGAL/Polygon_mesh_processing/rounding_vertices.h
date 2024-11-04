@@ -18,6 +18,7 @@
 #include <CGAL/Polygon_mesh_processing/self_intersections.h>
 #include <CGAL/Polygon_mesh_processing/autorefinement.h>
 #include <CGAL/Polygon_mesh_processing/repair_polygon_soup.h>
+#include <CGAL/Lazy_exact_nt.h>
 #include <boost/core/bit.hpp>
 
 #ifdef CGAL_LINKED_WITH_TBB
@@ -37,29 +38,43 @@ namespace Polygon_mesh_processing {
 
 namespace internal{
 
-    template <class K>
-    typename K::Point_3 round_coordinates_to_double(const typename K::Point_3 &p){
-        return typename K::Point_3(to_double(p.x()), to_double(p.y()), to_double(p.z()));
+    template <class NT>
+    double ceil(NT v){
+        return std::ceil(to_double(v));
     }
 
-    template <class K>
-    double ceil(typename K::FT v){
-        return std::ceil(CGAL::to_double(v));
+    //If Lazy_exact is not use, they are no difference between ceil/exact_ceil and to_double/to_exact_closest_double
+    template <class NT>
+    double to_exact_closest_double(NT v){
+        return to_double(v);
     }
 
-    template <class K>
-    double exact_ceil(typename K::FT v){
+    template <class NT>
+    double exact_ceil(NT v){
+        return ceil(v);
+    }
+
+    //If Lazy_exact is use, we can filter if the interval is large of one ulp
+    template <class NT>
+    double to_exact_closest_double(Lazy_exact_nt< NT > v){
+        if( std::nextafter(to_interval(v).first, to_interval(v).second)==to_interval(v).second )
+            return to_interval(v).first;
+        return to_double(exact(v));
+    }
+    
+    //If Lazy_exact is use, we can filter with the interval if they have same ceil values
+    template <class NT>
+    double exact_ceil(Lazy_exact_nt< NT > v){
         //Check if the precision of double is enough to describe correctly the integer
         if(std::ceil(to_interval(v).first) != std::ceil(to_interval(v).second)){
-            //Compute exact
-            //CGAL::exact(a);
-            //Check again
+            //Compute exact and check again
+            exact(v);
             if(std::ceil(to_interval(v).first) != std::ceil(to_interval(v).second)){
+                //Test all integers in the bracket in increasing order
                 double int_lbrack =std::ceil(CGAL::to_interval(v).first);
                 double int_rbrack =std::ceil(CGAL::to_interval(v).second);
-                //Check all integer in the brack 
                 for(double i=int_lbrack; i<=int_rbrack; i++){
-                    if(v <= typename K::FT(i)){
+                    if(v <= i){
                         return i;
                     }
                 }
@@ -69,66 +84,52 @@ namespace internal{
         return std::ceil(CGAL::to_interval(v).first);
     }
 
-    template <class K>
-    double snap(typename K::FT v, double scale){
-        return ceil<K>((v-0.5)*scale)/scale;
-    }
-
-    template <class K>
-    typename K::Point_3 snap(const typename K::Point_3 &p, std::array<double, 3> scale){
-        return typename K::Point_3(snap<K>(p.x(), scale[0]), snap<K>(p.y(), scale[1]), snap<K>(p.z(), scale[2]));
-    }
-
-    template <class K, class PointRange>
-    void snap_nearby_vertices(PointRange &points, const std::set<size_t> indexes, const std::array<double, 3> scale){
-	    if(indexes.size()==0)
-		    return;
-
-        //Round indexes vertices
-        for(size_t i : indexes)
-            points[i] = snap<K>(points[i],scale);
-
-        //Copy and sort the indexes
-        std::vector<typename K::Point_3> sorted_indexes;
-        sorted_indexes.reserve(indexes.size());
-        for(size_t i : indexes)
-            sorted_indexes.emplace_back(points[i]);
-        std::sort(sorted_indexes.begin(), sorted_indexes.end());
-
-        //For all points, check if their snap versions are equal to one of the indexes
-        #ifdef CGAL_LINKED_WITH_TBB
-            if(true)
-            //if (parallel_execution)
-            {
-                tbb::parallel_for(tbb::blocked_range<size_t>(0, points.size()),
-                            [&](const tbb::blocked_range<size_t>& r) {
-                                for (size_t pi = r.begin(); pi != r.end(); ++pi){
-                                    typename K::Point_3 snap_p=snap<K>(points[pi],scale);
-                                    if(std::binary_search(sorted_indexes.begin(), sorted_indexes.end(), snap_p)){
-                                        points[pi]=snap_p;
-                                    }
-                                }
-                            }
-                            );
-
-            } else
-        #endif
-        for(typename K::Point_3 &p: points){
-            typename K::Point_3 snap_p=snap<K>(p,scale);
-                if(std::binary_search(sorted_indexes.begin(), sorted_indexes.end(), snap_p))
-                    p=snap_p;
-        }
-
-    }
-
 }
 
-template <class PointRange, class TriangleRange, class NamedParameters = parameters::Default_named_parameters>
-bool does_triangle_soup_fit_in_double(PointRange& soup_points,
-                              TriangleRange& soup_triangles,
-                              const NamedParameters& np = parameters::default_values())
-{
+/**
+*
+* Check if the coordinates of all the vertices fit in double. 
+*
+* @tparam PointRange a model of the concept `RandomAccessContainer`
+* whose value type is the point type
+* @tparam NamedParameters a sequence of \ref bgl_namedparameters "Named Parameters"
+*
+* @param soup_points points of the soup of polygons
+* @param np an optional sequence of \ref bgl_namedparameters "Named Parameters" among the ones listed below
+*
+* \cgalNamedParamsBegin
+*   \cgalParamNBegin{concurrency_tag}
+*     \cgalParamDescription{a tag indicating if the task should be done using one or several threads.}
+*     \cgalParamType{Either `CGAL::Sequential_tag`, or `CGAL::Parallel_tag`, or `CGAL::Parallel_if_available_tag`}
+*     \cgalParamDefault{`CGAL::Sequential_tag`}
+*   \cgalParamNEnd
+*   \cgalParamNBegin{point_map}
+*     \cgalParamDescription{a property map associating points to the elements of the range `soup_points`}
+*     \cgalParamType{a model of `ReadWritePropertyMap` whose value type is a point type}
+*     \cgalParamDefault{`CGAL::Identity_property_map`}
+*   \cgalParamNEnd
+*   \cgalParamNBegin{geom_traits}
+*     \cgalParamDescription{an instance of a geometric traits class}
+*     \cgalParamType{a class model of `Kernel`}
+*     \cgalParamDefault{a \cgal Kernel deduced from the point type, using `CGAL::Kernel_traits`}
+*     \cgalParamExtra{The geometric traits class must be compatible with the point type.}
+*   \cgalParamNEnd
+* \cgalNamedParamsEnd
+*
+* @return true if all the coordinates fit in double, false if not
+*/
 
+template <class PointRange, class NamedParameters = parameters::Default_named_parameters>
+bool does_triangle_soup_fit_in_double(PointRange& soup_points,
+                                 const NamedParameters& np = parameters::default_values())
+{
+    typedef typename GetPolygonSoupGeomTraits<PointRange, NamedParameters>::type K;
+
+    double v;
+    for(typename K::Point_3 &p: soup_points)
+         if( (to_double(p.x())!=p.x()) || (to_double(p.y())!=p.y()) && (to_double(p.z())!=p.z()))
+            return false;
+    return true;
 }
 
 /**
@@ -189,7 +190,7 @@ bool does_triangle_soup_fit_in_double(PointRange& soup_points,
 * @return true if the output is intersection free, false if not
 */
 
-template <class K, class PointRange, class TriangleRange, class NamedParameters = parameters::Default_named_parameters>
+template <class PointRange, class TriangleRange, class NamedParameters = parameters::Default_named_parameters>
 bool round_vertices_triangle_soup(PointRange& soup_points,
                               TriangleRange& soup_triangles,
                               const NamedParameters& np = parameters::default_values())
@@ -202,6 +203,7 @@ bool round_vertices_triangle_soup(PointRange& soup_points,
     typedef std::size_t Input_VID;
     typedef std::pair<Input_TID, Input_TID> Pair_of_triangle_ids;
 
+    typedef typename GetPolygonSoupGeomTraits<PointRange, NamedParameters>::type K;
     typedef typename internal_np::Lookup_named_param_def <
         internal_np::concurrency_tag_t,
         NamedParameters,
@@ -216,7 +218,7 @@ bool round_vertices_triangle_soup(PointRange& soup_points,
     //constexpr bool exact_rounding = choose_parameter<Exact_rounding>(get_parameter(np, internal_np::rounding_precision));
     constexpr size_t nb_iter=20;
     constexpr size_t nb_bits=23;
-    constexpr bool exact_rounding=false;
+    constexpr bool exact_rounding=true;
 
     //Compute the largest absolute value on each coordinate and take the smallest above power of two for each coordinate
     CGAL_PMP_ROUNDING_VERTICES_VERBOSE("compute scaling of the coordinates")
@@ -233,6 +235,18 @@ bool round_vertices_triangle_soup(PointRange& soup_points,
                                    std::pow(2.,nb_bits-exponent(max[1])),
                                    std::pow(2.,nb_bits-exponent(max[2]))};
 
+    //Define snap functions
+    auto snap_v=[exact_rounding](typename K::FT v, double scale){
+        if(exact_rounding)
+            return internal::exact_ceil((v-0.5)*scale)/scale;
+        else
+            return internal::ceil((v-0.5)*scale)/scale;
+    };
+
+    auto snap=[&scale, &snap_v](const typename K::Point_3 &p){
+        return typename K::Point_3(snap_v(p.x(), scale[0]), snap_v(p.y(), scale[1]), snap_v(p.z(), scale[2]));
+    };
+
     CGAL_PMP_ROUNDING_VERTICES_VERBOSE("start the while loop")
 	for(size_t k=0; k<nb_iter; ++k)
     {
@@ -242,9 +256,10 @@ bool round_vertices_triangle_soup(PointRange& soup_points,
         CGAL_PMP_ROUNDING_VERTICES_VERBOSE("Round coordinates")
         if(exact_rounding)
         {
-            // TODO Need Lazy exact, to be put in the code only if exact_rounding is true
-            // for(typename K::Point_3 &p : soup_points)
-			//     p=typename K::Point_3(to_double(p.x().exact()), to_double(p.y().exact()), to_double(p.z().exact()));
+            for(typename K::Point_3 &p : soup_points)
+		        p=typename K::Point_3(internal::to_exact_closest_double(p.x()), 
+                                      internal::to_exact_closest_double(p.y()), 
+                                      internal::to_exact_closest_double(p.z()));
         } else {
 		    for(typename K::Point_3 &p : soup_points)
 			    p=typename K::Point_3(to_double(p.x()), to_double(p.y()), to_double(p.z()));
@@ -261,7 +276,7 @@ bool round_vertices_triangle_soup(PointRange& soup_points,
         {
             #ifndef CGAL_NDEBUG
             CGAL_PMP_ROUNDING_VERTICES_VERBOSE("check soup");
-            CGAL_assertion( does_triangle_soup_fit_in_double(soup_points, soup_triangles) );
+            CGAL_assertion( does_triangle_soup_fit_in_double<K>(soup_points, soup_triangles) );
             CGAL_assertion( !does_triangle_soup_self_intersect<Concurrency_tag>(soup_points, soup_triangles) );
             #endif
             CGAL_PMP_ROUNDING_VERTICES_VERBOSE("Done")
@@ -281,9 +296,43 @@ bool round_vertices_triangle_soup(PointRange& soup_points,
 			}
 		}
 
-        //Round coordinates of the vertices of the intersecting triangles and the vertices nearby them to the integer grid
-        CGAL_PMP_ROUNDING_VERTICES_VERBOSE("Snap the well-chosen vertices")
-		internal::snap_nearby_vertices<K>(soup_points, inter_points, scale);
+        //Snap the vertices of intersecting triangles
+        CGAL_PMP_ROUNDING_VERTICES_VERBOSE("Snap the vertices of intersecting triangles")
+        for(size_t i : inter_points)
+            soup_points[i] = snap(soup_points[i]);
+
+        //Copy and sort the snap vertices
+        std::vector<typename K::Point_3> sorted_snap_vertices;
+        sorted_snap_vertices.reserve(inter_points.size());
+        for(size_t i : inter_points)
+            sorted_snap_vertices.emplace_back(soup_points[i]);
+        std::sort(sorted_snap_vertices.begin(), sorted_snap_vertices.end());
+
+        //Snap the vertices nearby than these already snapped
+        //For all the points, we check if their snap version are equal to one of the indexes
+        CGAL_PMP_ROUNDING_VERTICES_VERBOSE("Snap vertices nearby than these already rounded")
+        #ifdef CGAL_LINKED_WITH_TBB
+            if(true)
+            //if (parallel_execution)
+            {
+                tbb::parallel_for(tbb::blocked_range<size_t>(0, soup_points.size()),
+                            [&](const tbb::blocked_range<size_t>& r) {
+                                for (size_t pi = r.begin(); pi != r.end(); ++pi){
+                                    typename K::Point_3 snap_p=snap(soup_points[pi]);
+                                    if(std::binary_search(sorted_snap_vertices.begin(), sorted_snap_vertices.end(), snap_p)){
+                                        soup_points[pi]=snap_p;
+                                    }
+                                }
+                            }
+                            );
+
+            } else
+        #endif
+        for(typename K::Point_3 &p: soup_points){
+            typename K::Point_3 snap_p=snap(p);
+                if(std::binary_search(sorted_snap_vertices.begin(), sorted_snap_vertices.end(), snap_p))
+                    p=snap_p;
+        }
 
         //Refine self-intersections
         CGAL_PMP_ROUNDING_VERTICES_VERBOSE("Refine self-intersections")

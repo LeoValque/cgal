@@ -12,7 +12,7 @@
 
 #include <iostream>
 
-typedef CGAL::Exact_predicates_inexact_constructions_kernel Kernel;
+typedef CGAL::Exact_predicates_exact_constructions_kernel Kernel;
 typedef Kernel::Point_3                                     Point;
 
 namespace PMP = CGAL::Polygon_mesh_processing;
@@ -34,7 +34,7 @@ int main(int argc, char** argv)
 
   CGAL::Real_timer t;
   t.start();
-  PMP::round_vertices_triangle_soup<Kernel>(input_points, input_triangles,
+  PMP::round_vertices_triangle_soup(input_points, input_triangles,
                                 //CGAL::parameters::concurrency_tag(CGAL::Sequential_tag()));
                                 //CGAL::parameters::concurrency_tag(CGAL::Parallel_tag()));
                                 CGAL::parameters::concurrency_tag(CGAL::Parallel_if_available_tag()));
