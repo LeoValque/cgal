@@ -594,7 +594,7 @@ public:
     \return an optional containing the property map if it exists
    */
   template <typename T>
-  std::optional<Property_map<T>> property(const std::string& name) {
+  std::optional<Property_map<T>> property(const std::string& name) const {
     auto p = m_node_properties.template get_property_if_exists<T>(name);
     if (p)
       return std::optional<Property_map<T> >(Property_map<T>(*p));
@@ -1410,7 +1410,7 @@ public:
   }
 
   void dump_box_to_polylines(const Bbox_2& box, std::ostream& os) const {
-    // dump in 3D for visualisation
+    // dump in 3D for visualization
     os << "5 "
        << box.xmin() << " " << box.ymin() << " 0 "
        << box.xmin() << " " << box.ymax() << " 0 "
