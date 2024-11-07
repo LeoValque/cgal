@@ -169,12 +169,12 @@ bool does_triangle_soup_fit_in_double(PointRange& soup_points,
 *     \cgalParamExtra{The geometric traits class must be compatible with the point type.}
 *   \cgalParamNEnd
 *   \cgalParamNBegin{max_nb_iteration}
-*     \cgalParamDescription{The maximum number of iteration}
+*     \cgalParamDescription{The maximum number of iteration of the algorithm.}
 *     \cgalParamType{size_t}
 *     \cgalParamDefault{20}
 *   \cgalParamNEnd
 *   \cgalParamNBegin{rounding_precision}
-*     \cgalParamDescription{Number of digits conserved during each iteration of the rounding process}
+*     \cgalParamDescription{Number of digits of the coordinates conserved during each iteration of the rounding process}
 *     \cgalParamType{size_t}
 *     \cgalParamDefault{23}
 *     \cgalParamExtra{The value must be lower than 52 (number of digits of a mantissa). A higher value reduce the distance between a point and its rounding value but increase the chance of the output to be self-intersecting}
@@ -182,8 +182,8 @@ bool does_triangle_soup_fit_in_double(PointRange& soup_points,
 * \cgalParamNBegin{exact_rounding}
 *     \cgalParamDescription{Compute the exact value before to round a coordinate giving guarantee on the distance between a point and its rounding value.}
 *     \cgalParamType{bool}
-*     \cgalParamDefault{false}
-*     \cgalParamExtra{The number type must be Lazy_exact_NT< T >}
+*     \cgalParamDefault{true}
+*     \cgalParamExtra{Use only if the number type is a Lazy_exact_NT}
 *   \cgalParamNEnd
 * \cgalNamedParamsEnd
 *
