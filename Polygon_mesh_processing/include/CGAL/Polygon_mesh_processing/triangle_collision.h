@@ -23,6 +23,8 @@
 namespace CGAL{
 namespace Polygon_mesh_processing{
 
+//test modif
+
 enum class MotionStep{X_MOVING, Y_MOVING, Z_MOVING, COPLANAR};
 enum class CollisionType{EDGE_EDGE, VERTEX_TRIANGLE, VERTEX_VERTEX};
 
