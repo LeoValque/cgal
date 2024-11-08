@@ -44,6 +44,11 @@ int main(int argc, char** argv)
   std::vector<CGAL::Exact_predicates_inexact_constructions_kernel::Point_3> output_points;
   for(auto &p: input_points)
     output_points.emplace_back(CGAL::to_double(p.x()), CGAL::to_double(p.y()), CGAL::to_double(p.z()));
+
+  bool si_after_round = PMP::does_triangle_soup_self_intersect(output_points, input_triangles);
+
+  std::cout << "self-intersecting? " << si_after_round << "\n";
+
   CGAL::IO::write_polygon_soup("autorefined_and_rounded.off", output_points, input_triangles, CGAL::parameters::stream_precision(17));
 
   return 0;
