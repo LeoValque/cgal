@@ -1,4 +1,4 @@
-// Copyright (c) 2024 ?? (France).
+// Copyright (c) 2024 Université de Lorraine (France).
 // All rights reserved.
 //
 // This file is part of CGAL (www.cgal.org).
