@@ -164,6 +164,9 @@ CGAL_add_named_parameter(region_primitive_map_t, region_primitive_map, region_pr
 CGAL_add_named_parameter(postprocess_regions_t, postprocess_regions, postprocess_regions)
 CGAL_add_named_parameter(sizing_function_t, sizing_function, sizing_function)
 CGAL_add_named_parameter(bbox_scaling_t, bbox_scaling, bbox_scaling)
+CGAL_add_named_parameter(max_nb_of_iteration_t, max_nb_of_iteration, max_nb_of_iteration)
+CGAL_add_named_parameter(snapping_precision_t, snapping_precision, snapping_precision)
+CGAL_add_named_parameter(do_exact_rounding_t, do_exact_rounding, do_exact_rounding)
 
 // List of named parameters that we use in the package 'Surface Mesh Simplification'
 CGAL_add_named_parameter(get_cost_policy_t, get_cost_policy, get_cost)

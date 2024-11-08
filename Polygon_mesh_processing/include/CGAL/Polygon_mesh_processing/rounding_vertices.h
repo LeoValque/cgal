@@ -173,17 +173,17 @@ bool does_triangle_soup_fit_in_double(PointRange& soup_points,
 *     \cgalParamType{size_t}
 *     \cgalParamDefault{20}
 *   \cgalParamNEnd
-*   \cgalParamNBegin{rounding_precision}
-*     \cgalParamDescription{Number of digits of the coordinates conserved during each iteration of the rounding process}
+*   \cgalParamNBegin{snapping_precision}
+*     \cgalParamDescription{Number of digits of the coordinates conserved during each iteration of the snapping process}
 *     \cgalParamType{size_t}
 *     \cgalParamDefault{23}
 *     \cgalParamExtra{The value must be lower than 52 (number of digits of a mantissa). A higher value reduce the distance between a point and its rounding value but increase the chance of the output to be self-intersecting}
 *   \cgalParamNEnd
-* \cgalParamNBegin{exact_rounding}
+* \cgalParamNBegin{do_exact_rounding}
 *     \cgalParamDescription{Compute the exact value before to round a coordinate giving guarantee on the distance between a point and its rounding value.}
 *     \cgalParamType{bool}
 *     \cgalParamDefault{true}
-*     \cgalParamExtra{Use only if the number type is a Lazy_exact_NT}
+*     \cgalParamExtra{Differ only if the number type is a Lazy_exact_NT}
 *   \cgalParamNEnd
 * \cgalNamedParamsEnd
 *
@@ -212,13 +212,27 @@ bool round_vertices_triangle_soup(PointRange& soup_points,
     
     constexpr bool parallel_execution = std::is_same_v<Parallel_tag, Concurrency_tag>;
 
-    //TODO
-    //constexpr size_t nb_iter = choose_parameter<Max_nb_rounding_iteration>(get_parameter(np, internal_np::max_nb_rounding_iteration));
-    //constexpr size_t nb_bits = choose_parameter<Rounding_precision>(get_parameter(np, internal_np::rounding_precision));
-    //constexpr bool exact_rounding = choose_parameter<Exact_rounding>(get_parameter(np, internal_np::rounding_precision));
-    constexpr size_t nb_iter=20;
-    constexpr size_t nb_bits=23;
-    constexpr bool exact_rounding=true;
+    typedef typename internal_np::Lookup_named_param_def <
+        internal_np::max_nb_of_iteration_t,
+        NamedParameters,
+        size_t //default
+    >::type Max_nb_of_iteration;
+
+    typedef typename internal_np::Lookup_named_param_def <
+        internal_np::snapping_precision_t,
+        NamedParameters,
+        size_t //default
+    >::type Snapping_precision;
+
+    typedef typename internal_np::Lookup_named_param_def <
+        internal_np::do_exact_rounding_t,
+        NamedParameters,
+        bool //default
+    >::type Do_exact_rounding;
+
+    const size_t nb_iter = choose_parameter<Max_nb_of_iteration>(get_parameter(np, internal_np::max_nb_of_iteration), 20);
+    const size_t nb_bits = choose_parameter<Snapping_precision>(get_parameter(np, internal_np::snapping_precision),  23);
+    const bool exact_rounding = choose_parameter<Do_exact_rounding>(get_parameter(np, internal_np::do_exact_rounding), true);
 
     //Compute the largest absolute value on each coordinate and take the smallest above power of two for each coordinate
     CGAL_PMP_ROUNDING_VERTICES_VERBOSE("compute scaling of the coordinates")
@@ -284,6 +298,7 @@ bool round_vertices_triangle_soup(PointRange& soup_points,
 		}
 
         // List all intersecting triangles and their vertices
+        CGAL_PMP_ROUNDING_VERTICES_VERBOSE("List the vertices of intersecting triangles")
 		std::set<Input_VID> inter_points;
 		std::set<Input_TID> inter_faces;
 		for(Pair_of_triangle_ids pair: si_pairs)
