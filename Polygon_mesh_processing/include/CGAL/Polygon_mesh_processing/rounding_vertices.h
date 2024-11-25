@@ -54,10 +54,10 @@ namespace internal{
         return ceil(v);
     }
 
-    //If Lazy_exact is use, we can filter if the interval is large of one ulp
+    //If Lazy_exact is use, we can filter if the interval is a singleton
     template <class NT>
     double to_exact_closest_double(Lazy_exact_nt< NT > v){
-        if( std::nextafter(to_interval(v).first, to_interval(v).second)==to_interval(v).second )
+        if( to_interval(v).first==to_interval(v).second )
             return to_interval(v).first;
         return to_double(exact(v));
     }
@@ -252,9 +252,9 @@ bool round_vertices_triangle_soup(PointRange& soup_points,
     //Define snap functions
     auto snap_v=[exact_rounding](typename K::FT v, double scale){
         if(exact_rounding)
-            return internal::exact_ceil((v-0.5)*scale)/scale;
+            return internal::exact_ceil(v*scale-0.5)/scale;
         else
-            return internal::ceil((v-0.5)*scale)/scale;
+            return internal::ceil(v*scale-0.5)/scale;
     };
 
     auto snap=[&scale, &snap_v](const typename K::Point_3 &p){
