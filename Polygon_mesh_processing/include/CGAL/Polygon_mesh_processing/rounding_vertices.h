@@ -61,7 +61,7 @@ namespace internal{
             return to_interval(v).first;
         return to_double(exact(v));
     }
-    
+
     //If Lazy_exact is use, we can filter with the interval if they have same ceil values
     template <class NT>
     double exact_ceil(Lazy_exact_nt< NT > v){
@@ -88,7 +88,7 @@ namespace internal{
 
 /**
 *
-* Check if the coordinates of all the vertices fit in double. 
+* Check if the coordinates of all the vertices fit in double.
 *
 * @tparam PointRange a model of the concept `RandomAccessContainer`
 * whose value type is the point type
@@ -134,7 +134,7 @@ bool does_triangle_soup_fit_in_double(PointRange& soup_points,
 
 /**
 *
-* Refines a soup of triangles and round the coordinates of the vertices so that no pair of triangles intersects and all the coordinates fit in double. 
+* Refines a soup of triangles and round the coordinates of the vertices so that no pair of triangles intersects and all the coordinates fit in double.
 * The function iterates as long as self-intersection occurs or the max number of iteration is reached.
 * Output triangles may share a common edge or a common vertex (but with the same indexed position in `points`).
 * Note that the function calls repair_polygon_soup and thus the point and polygon containers will be modified by the repairing operations, and thus the indexing of the polygons will also be changed.
@@ -209,7 +209,7 @@ bool round_vertices_triangle_soup(PointRange& soup_points,
         NamedParameters,
         Sequential_tag
     > ::type Concurrency_tag;
-    
+
     constexpr bool parallel_execution = std::is_same_v<Parallel_tag, Concurrency_tag>;
 
     typedef typename internal_np::Lookup_named_param_def <
@@ -265,14 +265,16 @@ bool round_vertices_triangle_soup(PointRange& soup_points,
 	for(size_t k=0; k<nb_iter; ++k)
     {
         CGAL_PMP_ROUNDING_VERTICES_VERBOSE("start iteration " << (k+1))
+        CGAL_PMP_ROUNDING_VERTICES_VERBOSE("soup_points.size() " << soup_points.size())
+        CGAL_PMP_ROUNDING_VERTICES_VERBOSE("soup_triangles.size() " << soup_triangles.size())
 
         //Round all coordinates on doubles
         CGAL_PMP_ROUNDING_VERTICES_VERBOSE("Round coordinates")
         if(exact_rounding)
         {
             for(typename K::Point_3 &p : soup_points)
-		        p=typename K::Point_3(internal::to_exact_closest_double(p.x()), 
-                                      internal::to_exact_closest_double(p.y()), 
+		        p=typename K::Point_3(internal::to_exact_closest_double(p.x()),
+                                      internal::to_exact_closest_double(p.y()),
                                       internal::to_exact_closest_double(p.z()));
         } else {
 		    for(typename K::Point_3 &p : soup_points)
