@@ -1,3 +1,5 @@
+#define PMP_DELETE_SMALL_COMPONENTS_IN_SNAP_POLYGON_SOUP
+
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Polygon_mesh_processing/repair_polygon_soup.h>
 #include <CGAL/Polygon_mesh_processing/autorefinement.h>

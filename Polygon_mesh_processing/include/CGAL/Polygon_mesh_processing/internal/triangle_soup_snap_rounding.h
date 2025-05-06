@@ -23,6 +23,14 @@
 #include <CGAL/Fraction_traits.h>
 #include <CGAL/Lazy_exact_nt.h>
 
+#if defined(PMP_DELETE_SMALL_COMPONENTS_IN_SNAP_POLYGON_SOUP)
+#include <CGAL/Polygon_mesh_processing/orient_polygon_soup.h>
+#include <CGAL/Surface_mesh.h>
+#include <CGAL/Polygon_mesh_processing/polygon_mesh_to_polygon_soup.h>
+#include <CGAL/Polygon_mesh_processing/polygon_soup_to_polygon_mesh.h>
+#include <CGAL/Polygon_mesh_processing/connected_components.h>
+#endif
+
 namespace CGAL
 {
 
@@ -329,6 +337,22 @@ bool polygon_soup_snap_rounding_impl(PointRange &points,
     for (Point_3 &p : points)
       p = Point_3(to_double(p.x()), to_double(p.y()), to_double(p.z()));
     repair_triangle_soup(points, triangles, np);
+
+#if defined(PMP_DELETE_SMALL_COMPONENTS_IN_SNAP_POLYGON_SOUP)
+
+  orient_polygon_soup(points, triangles);
+  Surface_mesh<Point_3> sm;
+  if(is_polygon_soup_a_polygon_mesh(triangles)){
+    polygon_soup_to_polygon_mesh(points, triangles, sm);
+    keep_largest_connected_components(sm, 1);
+    points.clear();
+    triangles.clear();
+    polygon_mesh_to_polygon_soup(sm, points, triangles);
+    repair_triangle_soup(points, triangles, np);
+  } else {
+    assert(0);
+  }
+#endif
 
     // Get all intersecting triangles
     std::vector<std::pair<std::size_t, std::size_t>> pairs_of_intersecting_triangles;
