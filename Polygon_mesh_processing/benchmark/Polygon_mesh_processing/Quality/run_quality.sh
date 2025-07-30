@@ -7,13 +7,14 @@ if [ "$#" -lt 4 ]; then
     exit 1
 fi
 
-INPUT_FILE=$1
-TIMEOUT=$2
-GRID_SIZE=$3
-ERASE_ALL_DUPLICATE=$4
+EXE_PATH=$1
+INPUT_FILE=$2
+TIMEOUT=$3
+GRID_SIZE=$4
+ERASE_ALL_DUPLICATE=$5
 
 TMP_LOG=$(mktemp)
-timeout "$TIMEOUT"s quality_snap_polygon_soup "$INPUT_FILE" "$GRID_SIZE" "$ERASE_ALL_DUPLICATE"  > "$TMP_LOG"
+timeout "$TIMEOUT"s "$EXE_PATH/quality_snap_polygon_soup" "$INPUT_FILE" "$GRID_SIZE" "$ERASE_ALL_DUPLICATE"  > "$TMP_LOG"
 
 cat $TMP_LOG
 rm -f "$TMP_LOG"

@@ -9,13 +9,14 @@ timeout_bis() {
   timeout 5 sleep 10
 }
 
-INPUT_FILE=$1
-TIMEOUT=$2
-GRID_SIZE=$3
-ERASE_ALL_DUPLICATE=$4
+EXE_PATH=$1
+INPUT_FILE=$2
+TIMEOUT=$3
+GRID_SIZE=$4
+ERASE_ALL_DUPLICATE=$5
 
 # Run with timeout, capture exit code
-timeout "--foreground" "$TIMEOUT"s robustness_snap_polygon_soup "$INPUT_FILE" "$GRID_SIZE" "$ERASE_ALL_DUPLICATE"
+timeout "--foreground" "$TIMEOUT"s "$EXE_PATH/robustness_snap_polygon_soup" "$INPUT_FILE" "$GRID_SIZE" "$ERASE_ALL_DUPLICATE"
 EXIT_CODE=$?
 
 # Interpret exit codes
