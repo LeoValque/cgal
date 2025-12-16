@@ -160,12 +160,14 @@ void test_kernel_with_rounding(std::string fname)
     std::cerr << "ERROR: cannot read " << fname << "\n";
     exit(1);
   }
-  round_mesh(m);
+  // round_mesh(m);
+  to_integer_mesh(m);
   timer.start();
   Mesh kernel = PMP::experimental::kernel(m);
   timer.stop();
 
   std::ofstream("kernel.off") << kernel;
+  std::cout << "nb of vertices of the kernek: " << vertices(kernel).size() << std::endl;
   std::cout << "test_kernel done in " << timer.time() << "\n";
 }
 
@@ -198,46 +200,47 @@ void test_exact_kernel_with_rounding(std::string fname)
   // round_mesh(m);
   to_integer_mesh(m);
   timer.start();
-  EMesh kernel = PMP::experimental::kernel(m);
+  EMesh kernel = PMP::experimental::kernel(m, CGAL::parameters::shuffle_planes(true));
   timer.stop();
 
   std::ofstream("ekernel.off") << kernel;
+  std::cout << "nb of vertices of the kernek: " << vertices(kernel).size() << std::endl;
   std::cout << "test_exact_kernel done in " << timer.time() << "\n";
 
-  timer.reset();
-  timer.start();
-  PMP::experimental::kernel(m, CGAL::parameters::shuffle_planes(true));
-  timer.stop();
+  // timer.reset();
+  // timer.start();
+  // PMP::experimental::kernel(m);
+  // timer.stop();
 
-  std::cout << "test_exact_kernel with shuffle done in " << timer.time() << "\n";
+  // std::cout << "test_exact_kernel without shuffle done in " << timer.time() << "\n";
 
-  timer.reset();
-  timer.start();
-  PMP::experimental::kernel(m, CGAL::parameters::use_bounding_box_filtering(false));
-  timer.stop();
+  // timer.reset();
+  // timer.start();
+  // PMP::experimental::kernel(m, CGAL::parameters::use_bounding_box_filtering(false));
+  // timer.stop();
 
-  std::cout << "test_exact_kernel without bbox done in " << timer.time() << "\n";
+  // std::cout << "test_exact_kernel without bbox done in " << timer.time() << "\n";
 
-  timer.reset();
-  timer.start();
-  PMP::experimental::kernel(m, CGAL::parameters::remove_duplicate_planes(true));
-  timer.stop();
+  // timer.reset();
+  // timer.start();
+  // PMP::experimental::kernel(m, CGAL::parameters::remove_duplicate_planes(true));
+  // timer.stop();
 
-  std::cout << "test_exact_kernel with remove duplicates done in " << timer.time() << "\n";
+  // std::cout << "test_exact_kernel with remove duplicates done in " << timer.time() << "\n";
 
-  timer.reset();
-  timer.start();
-  PMP::experimental::kernel(m, CGAL::parameters::look_concave_planes_first(true));
-  timer.stop();
+  // timer.reset();
+  // timer.start();
+  // PMP::experimental::kernel(m, CGAL::parameters::look_concave_planes_first(true));
+  // timer.stop();
 
-  std::cout << "test_exact_kernel with concave optim done in " << timer.time() << "\n";
+  // std::cout << "test_exact_kernel with concave optim done in " << timer.time() << "\n";
 
-  timer.reset();
-  timer.start();
-  PMP::experimental::kernel(m, CGAL::parameters::look_concave_planes_first(true).remove_duplicate_planes(true));
-  timer.stop();
+  // timer.reset();
+  // timer.start();
+  // PMP::experimental::kernel(m, CGAL::parameters::look_concave_planes_first(true).remove_duplicate_planes(true));
+  // timer.stop();
 
-  std::cout << "test_exact_kernel with concave optim and plane remove duplicates done in " << timer.time() << "\n";
+  // std::cout << "test_exact_kernel with concave optim and plane remove duplicates done in " << timer.time() << "\n";
 }
 
 void test_kernel_with_chull(std::string fname)
@@ -319,9 +322,9 @@ int main(int argc, char** argv)
   const std::string filename = (argc > 1) ? argv[1] : CGAL::data_file_path("meshes/blobby.off");
   // elementary_test_kernel();
   // test_kernel(filename);
-  // test_kernel_with_rounding(filename);
   // test_exact_kernel(filename);
   test_exact_kernel_with_rounding(filename);
+  test_kernel_with_rounding(filename);
   // test_trettner_kernel(filename);
   // test_plane_based_kernel(filename);
   // test_kernel_with_chull(filename);

@@ -102,6 +102,16 @@ struct Three_point_cut_plane_traits
     }
   };
 
+  struct Compare_squared_distance_3
+  {
+    using Base_compare_squared_distance_3 = typename Kernel::Compare_squared_distance_3;
+    FT operator()(const Plane_3& plane, const Point_3& p, const Point_3& q)
+    {
+      typename Kernel::Plane_3 pl(plane[0], plane[1], plane[2]);
+      return Base_compare_squared_distance_3()(pl, p, pl, q);
+    }
+  };
+
   Oriented_side_3 oriented_side_3_object() const
   {
     return Oriented_side_3();
@@ -129,6 +139,7 @@ struct Three_point_cut_plane_traits
   Construct_segment_3 construct_segment_3_object() const { return Construct_segment_3(); }
   Construct_triangle_3 construct_triangle_3_object() const { return Construct_triangle_3(); }
   Do_intersect_3 do_intersect_3_object() const { return Do_intersect_3(); }
+  Compare_squared_distance_3 compare_squared_distance_3_object() const { return Compare_squared_distance_3(); }
 #endif
 };
 
@@ -526,6 +537,16 @@ public:
     }
   };
 
+  struct Compare_squared_distance_3
+  {
+    FT operator()(const Plane_3& plane, const Point_3& p, const Point_3& q)
+    {
+      FT x = Compute_squared_distance_3()(plane, p);
+      FT y = Compute_squared_distance_3()(plane, q);
+      return compare(x, y);
+    }
+  };
+
   struct Construct_plane_line_intersection_point_3
   {
     plane_range_pointer m_planes;
@@ -599,6 +620,7 @@ public:
   Construct_plane_3 construct_plane_3_object() { return Construct_plane_3(m_planes); }
   Construct_point_3 construct_point_3_object() { return Construct_point_3(m_planes); }
   Compute_squared_distance_3 compute_squared_distance_3_object() const { return Compute_squared_distance_3(); }
+  Compare_squared_distance_3 compare_squared_distance_3_object() const {return Compare_squared_distance_3(); }
   Construct_plane_line_intersection_point_3 construct_plane_line_intersection_point_3_object() const {
     return Construct_plane_line_intersection_point_3(m_planes);
   }

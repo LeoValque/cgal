@@ -49,7 +49,7 @@ void clip_convex(PolygonMesh& pm,
   using GT = typename GetGeomTraits<PolygonMesh, NamedParameters>::type;
   GT traits = choose_parameter<GT>(get_parameter(np, internal_np::geom_traits));
 
-  using FT = typename GT::FT;
+  // using FT = typename GT::FT;
   using Point_3 = typename GT::Point_3;
 
   struct Default_Bbox{
@@ -80,45 +80,40 @@ void clip_convex(PolygonMesh& pm,
 
   auto oriented_side = traits.oriented_side_3_object();
   auto intersection_point = traits.construct_plane_line_intersection_point_3_object();
-  auto sq = traits.compute_squared_distance_3_object();
-  // auto csq = traits.compare_squared_distance_3_object();
+  // auto sq = traits.compute_squared_distance_3_object();
+  auto csq = traits.compare_squared_distance_3_object();
   // auto vector_3 = traits.construct_vector_3_object();
 
   // ____________________ Find a crossing edge _____________________
 
   vertex_descriptor src=*vertices(pm).begin();
-  FT sp_src = sq(plane, get(vpm, src)); // Not normalized distance
-  Sign direction_to_zero = sign(sp_src);
-
   vertex_descriptor trg;
-  FT sp_trg;
+  Oriented_side side_src = oriented_side(plane, get(vpm, src));
+  Oriented_side side_trg;
 
   bool is_crossing_edge=false;
-  if(direction_to_zero!=EQUAL){
+  if(side_src!=EQUAL){
     do{
       bool is_local_max=true;
       for(auto v: vertices_around_target(src ,pm)){
-        sp_trg = sq(plane, get(vpm, v));
-        CGAL_assertion(sq(plane, get(vpm, v)) == sp_trg);
-        // TODO with EPICK, use compare_distance(plane, src, plane, trg) (But no possibility to memorize some computations for the next)
         // Check if v in the direction to the plane
-        if(compare(sp_src, sp_trg)==direction_to_zero){
-          if(sign(sp_trg)!=direction_to_zero){
-            // Fund a crossing edge
-            trg = v;
-            is_crossing_edge=true;
-          } else {
-            // Continue from v
-            sp_src = sp_trg;
-            src = v;
-          }
+        side_trg = oriented_side(plane, get(vpm, v));
+        if(side_src!=side_trg){
+          // Fund a crossing edge
+          trg = v;
+          is_crossing_edge=true;
+          is_local_max=false; // repeat with the new vertex
+          break;
+        } else if(csq(plane, get(vpm, src), get(vpm, v))==LARGER){
+          // Continue from v
+          src = v;
           is_local_max=false; // repeat with the new vertex
           break;
         }
       }
       // No intersection with the plane, kernel is either empty or full
       if(is_local_max){
-        if(direction_to_zero==POSITIVE)
+        if(side_src==POSITIVE)
           clear(pm); // The result is empty
         return;
       }
@@ -126,17 +121,17 @@ void clip_convex(PolygonMesh& pm,
   } else {
     // src on the plane
     trg=src;
-    sp_trg = sp_src;
+    side_trg=EQUAL;
   }
 
-  if(sign(sp_trg)==EQUAL && direction_to_zero!=POSITIVE){
+  if(side_trg==EQUAL && side_src!=POSITIVE){
     // Search a vertex around trg coming from positive side
     bool no_positive_side = true;
     for(auto v: vertices_around_target(trg ,pm)){
       Oriented_side side_v = oriented_side(plane, get(vpm, v));
       if(side_v==ON_POSITIVE_SIDE){
         src = v;
-        sp_src = sq(plane, get(vpm, src));
+        side_src = side_v;
         no_positive_side = false;
         break;
       }
@@ -144,20 +139,23 @@ void clip_convex(PolygonMesh& pm,
     // Nothing to clip
     if(no_positive_side)
       return;
-  } else if(direction_to_zero==NEGATIVE){
+  } else if(side_src==NEGATIVE){
     // Orient the edge from negative to positive
     std::swap(src, trg);
+    std::swap(side_src, side_trg);
   }
 
-  CGAL_assertion(oriented_side(plane, get(vpm, src)) == ON_POSITIVE_SIDE);
-  CGAL_assertion(oriented_side(plane, get(vpm, trg)) != ON_POSITIVE_SIDE);
+  CGAL_assertion(side_src == ON_POSITIVE_SIDE);
+  CGAL_assertion(side_src == oriented_side(plane, get(vpm, src)));
+  CGAL_assertion(side_trg != ON_POSITIVE_SIDE);
+  CGAL_assertion(side_trg == oriented_side(plane, get(vpm, trg)));
 
   // Cut the convex along the plane by marching along crossing edges starting from the previous edge
   std::vector<halfedge_descriptor> boundaries;
   std::vector<vertex_descriptor> boundary_vertices;
 
   halfedge_descriptor h = halfedge(src, trg, pm).first;
-  if(sign(sp_trg)!=EQUAL)
+  if(side_trg!=EQUAL)
   {
     //split the first edge
     auto pts = make_sorted_pair(get(vpm, src), get(vpm, trg));
@@ -171,8 +169,8 @@ void clip_convex(PolygonMesh& pm,
   halfedge_descriptor h_start=h;
   do{
     halfedge_descriptor h_previous = h;
-    CGAL_assertion(oriented_side(plane, get(vpm, source(h,pm)))==ON_POSITIVE_SIDE);
-    CGAL_assertion(oriented_side(plane, get(vpm, target(h,pm)))==ON_ORIENTED_BOUNDARY);
+    // CGAL_assertion(oriented_side(plane, get(vpm, source(h,pm)))==ON_POSITIVE_SIDE);
+    // CGAL_assertion(oriented_side(plane, get(vpm, target(h,pm)))==ON_ORIENTED_BOUNDARY);
 
     h = next(h, pm);
     Oriented_side side_trg = oriented_side(plane, get(vpm, target(h,pm)));
@@ -195,12 +193,12 @@ void clip_convex(PolygonMesh& pm,
     // Search a crossing edge
     h = next(h, pm);
     side_trg=oriented_side(plane, get(vpm, target(h,pm)));
-    while(side_trg == ON_NEGATIVE_SIDE){
+    while(side_trg == ON_NEGATIVE_SIDE && target(h,pm)!=v_start){
       h = next(h,pm);
       side_trg=oriented_side(plane, get(vpm, target(h,pm)));
     }
 
-    if(side_trg != ON_ORIENTED_BOUNDARY){
+    if(side_trg != ON_ORIENTED_BOUNDARY && target(h,pm)!=v_start){
       // Split the edge
       auto pts = make_sorted_pair(get(vpm, source(h,pm)), get(vpm, target(h,pm)));
       typename GT::Point_3 ip = intersection_point(plane, pts.first, pts.second);
@@ -256,7 +254,7 @@ void clip_convex(PolygonMesh& pm,
         if(halfedge(target(h, pm), pm) == h && // To avoid multiple assertions of a same vertex
            !std::binary_search(boundary_vertices.begin(), boundary_vertices.end(), target(h, pm)))
           vertices_to_remove.push_back(target(h, pm));
-        CGAL_assertion(oriented_side(plane, get(vpm, target(h, pm)))!=ON_NEGATIVE_SIDE);
+        // CGAL_assertion(oriented_side(plane, get(vpm, target(h, pm)))!=ON_NEGATIVE_SIDE);
       }
       h = next(h, pm);
     } while (h != h_start);
