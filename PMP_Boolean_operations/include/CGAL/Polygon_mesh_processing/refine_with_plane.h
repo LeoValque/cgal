@@ -152,84 +152,14 @@ struct Orthogonal_cut_plane_traits
 };
 #endif
 
-/*!
- *  \ingroup PMP_slicing_grp
- *
- *  refines `pm` by inserting new vertices and new edges at the intersection of `plane` with `pm`.
- *
- *  \tparam PolygonMesh a model of `HalfedgeListGraph`, `FaceListGraph`, and `MutableFaceGraph`
- *  \tparam Plane_3 plane type, equal to `GeomTraits::Plane_3`, `GeomTraits` being the type of the parameter `geom_traits`.
- *  \tparam NamedParameters a sequence of \ref bgl_namedparameters "Named Parameters"
- *
- *  \param pm input mesh to be refined
- *  \param plane the plane used to refine the mesh
- *  \param np an optional sequence of \ref bgl_namedparameters "Named Parameters" among the ones listed below:
- *
- *  \cgalNamedParamsBegin
- *
- *   \cgalParamNBegin{edge_is_constrained_map}
- *     \cgalParamDescription{a property map containing the constrained-or-not status of each edge of `pm`.
- *                           If an edge marked as constrained is split, the two resulting edges will be marked as constrained.}
- *     \cgalParamType{a class model of `ReadWritePropertyMap` with `boost::graph_traits<PolygonMesh>::%edge_descriptor`
- *                    as key type and `bool` as value type}
- *     \cgalParamDefault{unused}
- *   \cgalParamNEnd
- *
- *   \cgalParamNBegin{edge_is_marked_map}
- *     \cgalParamDescription{a property map filled by this function with `true` for all intersection edges of faces
- *                           of `pm` and `plane`, and `false` for all other edges.}
- *     \cgalParamType{a class model of `WritablePropertyMap` with `boost::graph_traits<PolygonMesh>::%edge_descriptor`
- *                    as key type and `bool` as value type}
- *     \cgalParamDefault{unused}
- *   \cgalParamNEnd
- *
- *   \cgalParamNBegin{vertex_oriented_side_map}
- *     \cgalParamDescription{a property map filled by this function containing the position
- *                           of each vertex relative to the oriented plane `plane`.}
- *     \cgalParamType{a class model of `ReadWritePropertyMap` with `boost::graph_traits<PolygonMesh>::%vertex_descriptor`
- *                    as key type and `Oriented_side` as value type}
- *     \cgalParamDefault{Dynamic vertex property map}
- *   \cgalParamNEnd
- *
- *    \cgalParamNBegin{do_not_triangulate_faces}
- *      \cgalParamDescription{If the input mesh is triangulated and this parameter is set to `false`, the mesh will be kept triangulated.}
- *      \cgalParamType{Boolean}
- *      \cgalParamDefault{`true`}
- *      \cgalParamExtra{The function `triangulate_faces()` can be used to triangule faces before calling this function.}
- *    \cgalParamNEnd
- *
- *    \cgalParamNBegin{use_convex_specialization}
- *      \cgalParamDescription{If set to `true`, a faster implementation specialized for convex meshes is used. The input mesh must be convex to guarantee a correct execution and results.}
- *      \cgalParamType{Boolean}
- *      \cgalParamDefault{`false`}
- *      \cgalParamExtra{convex specialization is only used if `edge_is_constrained_map`, `edge_is_marked_map` and `vertex_oriented_side_map` are unused.}
- *    \cgalParamNEnd
- *
- *    \cgalParamNBegin{vertex_point_map}
- *      \cgalParamDescription{a property map associating points to the vertices of `pm`}
- *      \cgalParamType{a class model of `ReadWritePropertyMap` with `boost::graph_traits<PolygonMesh>::%vertex_descriptor`
- *                     as key type and `GeomTraits::Point_3` as value type, `GeomTraits` being the type of the parameter `geom_traits`}
- *      \cgalParamDefault{`boost::get(CGAL::vertex_point, pm)`}
- *      \cgalParamExtra{If this parameter is omitted, an internal property map for `CGAL::vertex_point_t` must be available in `PolygonMesh`.}
- *    \cgalParamNEnd
- *
- *    \cgalParamNBegin{geom_traits}
- *      \cgalParamDescription{an instance of a geometric traits class}
- *      \cgalParamType{a class model of `Kernel`}
- *      \cgalParamDefault{a \cgal kernel deduced from the point type, using `CGAL::Kernel_traits`}
- *      \cgalParamExtra{The geometric traits class must be compatible with the vertex point type.}
- *    \cgalParamNEnd
- *
- *  \cgalNamedParamsEnd
- *
- *  \sa `split()`
- *  \sa `clip()`
- *
- */
-template <class PolygonMesh, class Plane_3, class NamedParameters =  parameters::Default_named_parameters>
-void refine_with_plane(PolygonMesh& pm,
-                       const Plane_3& plane,
-                       const NamedParameters& np = parameters::default_values())
+namespace internal{
+template <class VerticesRange, class EdgesRange, class FacesRange, class PolygonMesh, class Plane_3, class NamedParameters =  parameters::Default_named_parameters>
+void refine_with_plane_impl(const VerticesRange &vertices,
+                            const EdgesRange &edges,
+                            const FacesRange &faces,
+                            PolygonMesh& pm,
+                            const Plane_3& plane,
+                            const NamedParameters& np = parameters::default_values())
 {
   // TODO: concurrency tag
  /*
@@ -241,14 +171,6 @@ void refine_with_plane(PolygonMesh& pm,
   *
   * + for vertex_oriented_side_map
   * --->   \cgalParamExtra{If parallelism is used, concurrent accesses to the property map must be safe.}
-
-  */
-  // TODO: if you want to clip with many planes (**Kernel**),
-  //       it might be interesting to first classify all vertices with all planes
-  //       to limit the number of intersection points computed: several classify done lazily
-  //       on points not already eliminated (verices all out with adjacent vertices out too)
-  // actually might be a global classifier to filter out edges, testing all planes at once per vertex and stop as soon as one is out
-  // TODO: doc visitor
  /*
   *    \cgalParamNBegin{visitor}
   *      \cgalParamDescription{TODO add concept}
@@ -279,16 +201,6 @@ void refine_with_plane(PolygonMesh& pm,
 
   auto ecm = choose_parameter<Default_ecm>(get_parameter(np, internal_np::edge_is_constrained));
   auto edge_is_marked = choose_parameter<Default_ecm>(get_parameter(np, internal_np::edge_is_marked_map));
-
-  bool use_convex_specialization = choose_parameter(get_parameter(np, internal_np::use_convex_specialization), false)
-                                   && is_default_parameter<NamedParameters, internal_np::edge_is_constrained_t>::value
-                                   && is_default_parameter<NamedParameters, internal_np::edge_is_marked_map_t>::value
-                                   && is_default_parameter<NamedParameters, internal_np::vertex_oriented_side_map_t>::value;
-  if(use_convex_specialization){
-    halfedge_descriptor he = internal::find_crossing_edge(pm, plane, np);
-    internal::refine_convex_with_plane(pm, plane, he, np);
-    return;
-  }
 
   Default_visitor default_visitor;
   Visitor_ref visitor = choose_parameter(get_parameter_reference(np, internal_np::visitor), default_visitor);
@@ -340,8 +252,9 @@ void refine_with_plane(PolygonMesh& pm,
   bool all_out = true;
   bool at_least_one_on = false;
   std::vector<vertex_descriptor> on_obnd;
+
   //TODO: parallel for
-  for (vertex_descriptor v : vertices(pm))
+  for (vertex_descriptor v : vertices)
   {
     Oriented_side os = oriented_side(plane,  get(vpm, v));
     put(vertex_os,v,os);
@@ -364,7 +277,7 @@ void refine_with_plane(PolygonMesh& pm,
   if (at_least_one_on || (!all_in && !all_out))
   {
     //TODO: parallel for
-    for(edge_descriptor e : edges(pm))
+    for(edge_descriptor e : edges)
     {
       vertex_descriptor src = source(e,pm), tgt = target(e,pm);
       if (get(vertex_os, src)==CGAL::ON_ORIENTED_BOUNDARY)
@@ -606,6 +519,147 @@ void refine_with_plane(PolygonMesh& pm,
     visitor.after_subface_creations(pm);
   }
   CGAL_assertion(is_valid_polygon_mesh(pm));
+}
+}
+
+/*!
+ *  \ingroup PMP_slicing_grp
+ *
+ *  \brief refines the given faces of `pm` by inserting new vertices and new edges at the intersection of `plane` with the faces.
+ *
+ *  \tparam PolygonMesh a model of `HalfedgeListGraph`, `FaceListGraph`, and `MutableFaceGraph`
+ *  \tparam Plane_3 plane type, equal to `GeomTraits::Plane_3`, `GeomTraits` being the type of the parameter `geom_traits`.
+ *  \tparam NamedParameters a sequence of \ref bgl_namedparameters "Named Parameters"
+ *
+ *  \param pm input mesh to be refined
+ *  \param plane the plane used to refine the mesh
+ *  \param np an optional sequence of \ref bgl_namedparameters "Named Parameters" among the ones listed below:
+ *
+ *  \cgalNamedParamsBegin
+ *
+ *   \cgalParamNBegin{edge_is_constrained_map}
+ *     \cgalParamDescription{a property map containing the constrained-or-not status of each edge of `pm`.
+ *                           If an edge marked as constrained is split, the two resulting edges will be marked as constrained.}
+ *     \cgalParamType{a class model of `ReadWritePropertyMap` with `boost::graph_traits<PolygonMesh>::%edge_descriptor`
+ *                    as key type and `bool` as value type}
+ *     \cgalParamDefault{unused}
+ *   \cgalParamNEnd
+ *
+ *   \cgalParamNBegin{edge_is_marked_map}
+ *     \cgalParamDescription{a property map filled by this function with `true` for all intersection edges of faces
+ *                           of `pm` and `plane`, and `false` for all other edges.}
+ *     \cgalParamType{a class model of `WritablePropertyMap` with `boost::graph_traits<PolygonMesh>::%edge_descriptor`
+ *                    as key type and `bool` as value type}
+ *     \cgalParamDefault{unused}
+ *   \cgalParamNEnd
+ *
+ *   \cgalParamNBegin{vertex_oriented_side_map}
+ *     \cgalParamDescription{a property map filled by this function containing the position
+ *                           of each vertex relative to the oriented plane `plane`.}
+ *     \cgalParamType{a class model of `ReadWritePropertyMap` with `boost::graph_traits<PolygonMesh>::%vertex_descriptor`
+ *                    as key type and `Oriented_side` as value type}
+ *     \cgalParamDefault{Dynamic vertex property map}
+ *   \cgalParamNEnd
+ *
+ *    \cgalParamNBegin{do_not_triangulate_faces}
+ *      \cgalParamDescription{If the input mesh is triangulated and this parameter is set to `false`, the mesh will be kept triangulated.}
+ *      \cgalParamType{Boolean}
+ *      \cgalParamDefault{`true`}
+ *      \cgalParamExtra{The function `triangulate_faces()` can be used to triangule faces before calling this function.}
+ *    \cgalParamNEnd
+ *
+ *    \cgalParamNBegin{use_convex_specialization}
+ *      \cgalParamDescription{If set to `true`, a faster implementation specialized for convex meshes is used. The input mesh must be convex to guarantee a correct execution and results.}
+ *      \cgalParamType{Boolean}
+ *      \cgalParamDefault{`false`}
+ *      \cgalParamExtra{convex specialization is only used if `edge_is_constrained_map`, `edge_is_marked_map` and `vertex_oriented_side_map` are unused.}
+ *    \cgalParamNEnd
+ *
+ *    \cgalParamNBegin{vertex_point_map}
+ *      \cgalParamDescription{a property map associating points to the vertices of `pm`}
+ *      \cgalParamType{a class model of `ReadWritePropertyMap` with `boost::graph_traits<PolygonMesh>::%vertex_descriptor`
+ *                     as key type and `GeomTraits::Point_3` as value type, `GeomTraits` being the type of the parameter `geom_traits`}
+ *      \cgalParamDefault{`boost::get(CGAL::vertex_point, pm)`}
+ *      \cgalParamExtra{If this parameter is omitted, an internal property map for `CGAL::vertex_point_t` must be available in `PolygonMesh`.}
+ *    \cgalParamNEnd
+ *
+ *    \cgalParamNBegin{geom_traits}
+ *      \cgalParamDescription{an instance of a geometric traits class}
+ *      \cgalParamType{a class model of `Kernel`}
+ *      \cgalParamDefault{a \cgal kernel deduced from the point type, using `CGAL::Kernel_traits`}
+ *      \cgalParamExtra{The geometric traits class must be compatible with the vertex point type.}
+ *    \cgalParamNEnd
+ *
+ *  \cgalNamedParamsEnd
+ *
+ *  \sa `split()`
+ *  \sa `clip()`
+ *
+ */
+template <class FacesRange, class PolygonMesh, class Plane_3, class NamedParameters =  parameters::Default_named_parameters>
+void refine_with_plane(const FacesRange &faces,
+                       PolygonMesh& pm,
+                       const Plane_3& plane,
+                       const NamedParameters& np = parameters::default_values())
+{
+  using BGT = boost::graph_traits<PolygonMesh>;
+  using face_descriptor = typename BGT::face_descriptor;
+  using edge_descriptor = typename BGT::edge_descriptor;
+  using halfedge_descriptor = typename BGT::halfedge_descriptor;
+  using vertex_descriptor = typename BGT::vertex_descriptor;
+
+  std::vector<vertex_descriptor> vertices;
+  vertices.reserve(3*faces.size());
+  for(face_descriptor f : faces)
+    for(vertex_descriptor v: vertices_around_face(halfedge(f, pm), pm))
+      vertices.push_back(v);
+  std::sort(vertices.begin(), vertices.end());
+  auto it_v = std::unique(vertices.begin(), vertices.end());
+  vertices.erase(it_v, vertices.end());
+
+  std::vector<edge_descriptor> edges;
+  edges.reserve(3*faces.size());
+  for(face_descriptor f : faces)
+    for(halfedge_descriptor h: halfedges_around_face(halfedge(f, pm), pm))
+      edges.push_back(edge(h, pm));
+  std::sort(edges.begin(), edges.end());
+  auto it_e = std::unique(edges.begin(), edges.end());
+  edges.erase(it_e, edges.end());
+
+  internal::refine_with_plane_impl(vertices, edges, faces, pm, plane, np);
+}
+
+/*!
+ *  \ingroup PMP_slicing_grp
+ *
+ * \brief refines `pm` by inserting new vertices and new edges at the intersection of `plane` with `pm`.
+ *
+ * This is a convenience overload that calls the overload above on all faces of the mesh.
+ *
+ */
+template <class PolygonMesh, class Plane_3, class NamedParameters =  parameters::Default_named_parameters>
+void refine_with_plane(PolygonMesh& pm,
+                       const Plane_3& plane,
+                       const NamedParameters& np = parameters::default_values())
+{
+  using BGT = boost::graph_traits<PolygonMesh>;
+  using halfedge_descriptor = typename BGT::halfedge_descriptor;
+
+  using parameters::choose_parameter;
+  using parameters::get_parameter;
+  using parameters::is_default_parameter;
+
+  bool use_convex_specialization = choose_parameter(get_parameter(np, internal_np::use_convex_specialization), false)
+                                   && is_default_parameter<NamedParameters, internal_np::edge_is_constrained_t>::value
+                                   && is_default_parameter<NamedParameters, internal_np::edge_is_marked_map_t>::value
+                                   && is_default_parameter<NamedParameters, internal_np::vertex_oriented_side_map_t>::value;
+
+  if(use_convex_specialization){
+    halfedge_descriptor he = internal::find_crossing_edge(pm, plane, np);
+    internal::refine_convex_with_plane(pm, plane, he, np);
+    return;
+  }
+  internal::refine_with_plane_impl(vertices(pm), edges(pm), faces(pm), pm, plane, np);
 }
 
 } } // CGAL::Polygon_mesh_processing

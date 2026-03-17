@@ -1462,7 +1462,7 @@ void split(PolygonMesh& pm,
                                           .concurrency_tag(Concurrency_tag())
                                           .visitor(std::ref(visitor)));
 
-  //split mesh along marked edges
+  // split mesh along marked edges
   internal::split_along_edges(pm, ecm, vpm, visitor);
 }
 
