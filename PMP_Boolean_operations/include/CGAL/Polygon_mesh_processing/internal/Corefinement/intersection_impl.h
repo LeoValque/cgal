@@ -194,7 +194,8 @@ struct Node_id_set {
 
 template< class TriangleMesh,
           class VertexPointMap1, class VertexPointMap2,
-          class Node_visitor=Default_surface_intersection_visitor<TriangleMesh>
+          class Node_visitor=Default_surface_intersection_visitor<TriangleMesh>,
+          class Concurrency_tag=Sequential_tag
          >
 class Intersection_of_triangle_meshes
 {
@@ -257,6 +258,8 @@ class Intersection_of_triangle_meshes
   {
     std::vector<Box> face_boxes, edge_boxes;
     std::vector<Box*> face_boxes_ptr, edge_boxes_ptr;
+
+    constexpr bool parallel_execution = std::is_same_v<Parallel_tag, Concurrency_tag>;
 
     face_boxes.reserve(num_faces(tm_f));
     face_boxes_ptr.reserve(num_faces(tm_f));
@@ -350,7 +353,8 @@ class Intersection_of_triangle_meshes
           if (!callback.is_face_degenerated(fb->info()))
             callback(fb, eb);
         };
-        CGAL::box_intersection_d( face_boxes_ptr.begin(), face_boxes_ptr.end(),
+        CGAL::box_intersection_d<Concurrency_tag>
+                                ( face_boxes_ptr.begin(), face_boxes_ptr.end(),
                                   edge_boxes_ptr.begin(), edge_boxes_ptr.end(),
                                   filtered_callback, cutoff );
       }
@@ -949,6 +953,8 @@ class Intersection_of_triangle_meshes
                                    Node_id& current_node)
   {
     typedef std::tuple<Intersection_type, halfedge_descriptor, bool,bool>  Inter_type;
+
+    constexpr bool parallel_execution = std::is_same_v<CGAL::Parallel_tag, Concurrency_tag>;
 
     visitor.start_handling_edge_face_intersections(tm1_edge_to_tm2_faces.size());
 

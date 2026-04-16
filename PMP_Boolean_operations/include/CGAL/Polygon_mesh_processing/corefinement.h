@@ -287,6 +287,12 @@ corefine_and_compute_boolean_operations(
   const bool throw_on_self_intersection =
     choose_parameter(get_parameter(np1, internal_np::throw_on_self_intersection), false);
 
+  typedef typename internal_np::Lookup_named_param_def <
+    internal_np::concurrency_tag_t,
+    NPIn1,
+    Sequential_tag
+  > ::type Concurrency_tag;
+
 // Vertex point maps
   //for input meshes
   typedef typename GetVertexPointMap<TriangleMesh, NPIn1>::type  VPM1;
@@ -489,7 +495,7 @@ corefine_and_compute_boolean_operations(
     ob.setup_for_clipping_a_surface(use_compact_clipper);
   }
 
-  Corefinement::Intersection_of_triangle_meshes<TriangleMesh, VPM1, VPM2, Algo_visitor >
+  Corefinement::Intersection_of_triangle_meshes<TriangleMesh, VPM1, VPM2, Algo_visitor, Concurrency_tag>
     functor(tm1, tm2, vpm1, vpm2, Algo_visitor(uv,ob,ecm_in));
   functor(CGAL::Emptyset_iterator(), throw_on_self_intersection, true);
 

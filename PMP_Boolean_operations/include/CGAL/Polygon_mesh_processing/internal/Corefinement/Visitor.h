@@ -34,6 +34,10 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/container/small_vector.hpp>
 
+#ifdef CGAL_LINKED_WITH_TBB
+#include <CGAL/mutex.h>
+#endif
+
 namespace CGAL {
 namespace Polygon_mesh_processing {
 namespace Corefinement{
@@ -1194,24 +1198,24 @@ public:
   }
 
   template <class OnFaceMapIterator, class VPM>
-  void triangulate_intersected_faces(OnFaceMapIterator it,
-                                     const VPM& vpm,
-                                     INodes& nodes,
-                                     std::map<TriangleMesh*, Face_boundaries>& mesh_to_face_boundaries)
+  void triangulate_intersected_face(typename On_face_map::iterator it,
+                                    OnFaceMapIterator it_map,
+                                    const VPM& vpm,
+                                    INodes& nodes,
+                                    std::map<TriangleMesh*, Face_boundaries>& mesh_to_face_boundaries)
   {
-    TriangleMesh& tm=*it->first;
+    // TODO make it thread safe
+
+    TriangleMesh& tm=*it_map->first;
     CGAL_assertion(&tm!=const_mesh_ptr);
 
-    On_face_map& on_face_map=it->second;
+    On_face_map& on_face_map=it_map->second;
     Face_boundaries& face_boundaries=mesh_to_face_boundaries[&tm];
     Node_id_to_vertex& node_id_to_vertex=mesh_to_node_id_to_vertex[&tm];
     Vertex_to_node_id& vertex_to_node_id=mesh_to_vertex_to_node_id[&tm];
 
     const Node_id nb_nodes = nodes.size();
 
-    for (typename On_face_map::iterator it=on_face_map.begin();
-          it!=on_face_map.end();++it)
-    {
       user_visitor.triangulating_faces_step();
       face_descriptor f = it->first; //the face to be triangulated
       Node_ids& node_ids  = it->second; // ids of nodes in the interior of f
@@ -1335,7 +1339,7 @@ public:
           }
         }
 
-        continue;
+        return;
       }
 
       typename EK::Point_3 p = nodes.to_exact(get(vpm,f_vertices[0])),
@@ -1536,6 +1540,28 @@ public:
           output_builder.set_edge_per_polyline(tm,opposite_pair,it_poly_hedge->second);
         }
       }
+  }
+
+  template <class OnFaceMapIterator, class VPM>
+  void triangulate_intersected_faces(OnFaceMapIterator it_map,
+                                     const VPM& vpm,
+                                     INodes& nodes,
+                                     std::map<TriangleMesh*, Face_boundaries>& mesh_to_face_boundaries)
+  {
+    TriangleMesh& tm=*it_map->first;
+    CGAL_assertion(&tm!=const_mesh_ptr);
+
+    On_face_map& on_face_map=it_map->second;
+    Face_boundaries& face_boundaries=mesh_to_face_boundaries[&tm];
+    Node_id_to_vertex& node_id_to_vertex=mesh_to_node_id_to_vertex[&tm];
+    Vertex_to_node_id& vertex_to_node_id=mesh_to_vertex_to_node_id[&tm];
+
+    const Node_id nb_nodes = nodes.size();
+
+    for (typename On_face_map::iterator it=on_face_map.begin();
+          it!=on_face_map.end();++it)
+    {
+      triangulate_intersected_face(it, it_map, vpm, nodes, mesh_to_face_boundaries);
     }
   }
 

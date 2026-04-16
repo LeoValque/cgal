@@ -3,6 +3,7 @@
 
 #include <CGAL/Polygon_mesh_processing/corefinement.h>
 #include <CGAL/Polygon_mesh_processing/IO/polygon_mesh_io.h>
+#include <CGAL/Real_timer.h>
 
 #include <fstream>
 
@@ -17,6 +18,7 @@ struct Visitor_rep{
     : normalize(normalize)
   {
     t.start();
+    rt.start();
   }
 
   void progress_filtering_intersections(double d)
@@ -82,6 +84,11 @@ struct Visitor_rep{
     return t.time();
   }
 
+  double real_time() const
+  {
+    return rt.time();
+  }
+
   double normalize;
   double bound = 0.1;
   double total = 0;
@@ -98,6 +105,7 @@ struct Visitor_rep{
   std::size_t tintersection = 0;
   std::size_t count_intersection = 0;
   CGAL::Timer t;
+  CGAL::Real_timer rt;
 };
 
 
@@ -118,16 +126,16 @@ struct Visitor :
 
   void start_filtering_intersections() const
   {
-    std::cout << "Visitor::start_filtering_intersections() at " << sptr->time() << " sec." << std::endl;
+    std::cout << "Visitor::start_filtering_intersections() at " << sptr->real_time() << " sec (" << sptr->time() << " sec cpu time)." << std::endl;
   }
   void end_filtering_intersections() const
   {
-    std::cout << "Visitor::end_filtering_intersections() at " << sptr->time() << " sec."  << std::endl;
+    std::cout << "Visitor::end_filtering_intersections() at " << sptr->real_time() << " sec (" << sptr->time() << " sec cpu time)." << std::endl;
   }
 
   void start_triangulating_faces(std::size_t tf) const
   {
-    std::cout << "Visitor::start_triangulation() with " << tf << " faces at " << sptr->time() << " sec."  << std::endl;
+    std::cout << "Visitor::start_triangulation() with " << tf << " faces at " << sptr->real_time() << " sec (" << sptr->time() << " sec cpu time)." << std::endl;
     sptr->start_triangulating_faces(tf);
     tf_counter = 0;
   }
@@ -139,7 +147,7 @@ struct Visitor :
 
   void end_triangulating_faces()const
   {
-    std::cout << "Visitor::end_triangulating_faces() at " << sptr->time() << " sec."  << std::endl;
+    std::cout << "Visitor::end_triangulating_faces() at " << sptr->real_time() << " sec (" << sptr->time() << " sec cpu time)." << std::endl;
   }
 
   void start_handling_intersection_of_coplanar_faces(std::size_t i) const
@@ -154,7 +162,7 @@ struct Visitor :
 
   void end_handling_intersection_of_coplanar_faces() const
   {
-    std::cout << "Visitor::end_coplanar_faces() at " << sptr->time() << " sec." << std::endl;
+    std::cout << "Visitor::end_coplanar_faces() at " << sptr->real_time() << " sec (" << sptr->time() << " sec cpu time)." << std::endl;
   }
 
   void start_handling_edge_face_intersections(std::size_t i) const
@@ -197,13 +205,17 @@ int main(int argc, char* argv[])
   }
 
   CGAL::Timer t;
+  CGAL::Real_timer rt;
   t.start();
+  rt.start();
   Mesh out;
   Visitor visitor;
 
-  bool valid_union = PMP::corefine_and_compute_union (mesh1,mesh2, out, CGAL::parameters::visitor(visitor));
+  // bool valid_union = PMP::corefine_and_compute_union (mesh1,mesh2, out, CGAL::parameters::visitor(visitor).concurrency_tag(CGAL::Parallel_if_available_tag()));
+  bool valid_union = PMP::corefine_and_compute_union (mesh1,mesh2, out, CGAL::parameters::visitor(visitor).concurrency_tag(CGAL::Sequential_tag()));
 
-  std::cout << "Global timer = " << t.time() << " sec." << std::endl;
+  std::cout << "Global CPU timer = " << t.time() << " sec." << std::endl;
+  std::cout << "Global Real timer = " << rt.time() << " sec." << std::endl;
 
 
   if(valid_union)
