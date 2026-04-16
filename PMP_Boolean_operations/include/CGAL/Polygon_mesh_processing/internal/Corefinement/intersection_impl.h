@@ -259,8 +259,6 @@ class Intersection_of_triangle_meshes
     std::vector<Box> face_boxes, edge_boxes;
     std::vector<Box*> face_boxes_ptr, edge_boxes_ptr;
 
-    constexpr bool parallel_execution = std::is_same_v<Parallel_tag, Concurrency_tag>;
-
     face_boxes.reserve(num_faces(tm_f));
     face_boxes_ptr.reserve(num_faces(tm_f));
     for(face_descriptor fd : faces(tm_f))
@@ -338,7 +336,8 @@ class Intersection_of_triangle_meshes
     //using pointers in box_intersection_d is about 10% faster
     if (throw_on_self_intersection){
         Callback_with_self_intersection_report<TriangleMesh, Callback> callback_si(callback, tm_f_faces, tm_e_faces);
-        CGAL::box_intersection_d(face_boxes_ptr.begin(), face_boxes_ptr.end(),
+        CGAL::box_intersection_d<Concurrency_tag>
+                                (face_boxes_ptr.begin(), face_boxes_ptr.end(),
                                  edge_boxes_ptr.begin(), edge_boxes_ptr.end(),
                                  callback_si, cutoff);
         if (run_check && callback_si.self_intersections_found())
@@ -392,12 +391,14 @@ class Intersection_of_triangle_meshes
               }
             }
           };
-          CGAL::box_intersection_d( face_boxes_ptr.begin(), face_boxes_ptr.end(),
+          CGAL::box_intersection_d<Concurrency_tag>
+                                  ( face_boxes_ptr.begin(), face_boxes_ptr.end(),
                                     edge_boxes_ptr.begin(), edge_boxes_ptr.end(),
                                     filtered_callback, cutoff );
         }
         else
-          CGAL::box_intersection_d( face_boxes_ptr.begin(), face_boxes_ptr.end(),
+          CGAL::box_intersection_d<Concurrency_tag>
+                                  ( face_boxes_ptr.begin(), face_boxes_ptr.end(),
                                     edge_boxes_ptr.begin(), edge_boxes_ptr.end(),
                                     callback, cutoff );
       }
@@ -953,8 +954,6 @@ class Intersection_of_triangle_meshes
                                    Node_id& current_node)
   {
     typedef std::tuple<Intersection_type, halfedge_descriptor, bool,bool>  Inter_type;
-
-    constexpr bool parallel_execution = std::is_same_v<CGAL::Parallel_tag, Concurrency_tag>;
 
     visitor.start_handling_edge_face_intersections(tm1_edge_to_tm2_faces.size());
 

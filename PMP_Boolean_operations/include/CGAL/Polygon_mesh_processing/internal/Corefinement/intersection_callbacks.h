@@ -25,12 +25,20 @@
 #include <memory>
 #include <set>
 
+
+#ifdef CGAL_LINKED_WITH_TBB
+#include <CGAL/mutex.h>
+#endif
+
 namespace CGAL {
 namespace Polygon_mesh_processing {
 namespace Corefinement {
 
 template<class TriangleMesh, class EdgeToFaces>
 class Collect_face_bbox_per_edge_bbox {
+#ifdef CGAL_LINKED_WITH_TBB
+  inline static CGAL_MUTEX m;
+#endif
 protected:
   const TriangleMesh& tm_faces;
   const TriangleMesh& tm_edges;
@@ -42,7 +50,6 @@ protected:
 
   typedef CGAL::Box_intersection_d::ID_FROM_BOX_ADDRESS Box_policy;
   typedef CGAL::Box_intersection_d::Box_with_info_d<double, 3, halfedge_descriptor, Box_policy> Box;
-
 public:
   Collect_face_bbox_per_edge_bbox(
     const TriangleMesh& tm_faces,
@@ -58,6 +65,9 @@ public:
     halfedge_descriptor fh = face_box.info();
     halfedge_descriptor eh = edge_box.info();
 
+#ifdef CGAL_LINKED_WITH_TBB
+    CGAL_SCOPED_LOCK(m);
+#endif
     edge_to_faces[edge(eh,tm_edges)].insert(face(fh, tm_faces));
   }
 
@@ -73,6 +83,10 @@ template<class TriangleMesh,
          class CoplanarFaceSet,
          class Visitor>
 class Collect_face_bbox_per_edge_bbox_with_coplanar_handling {
+#ifdef CGAL_LINKED_WITH_TBB
+  inline static CGAL_MUTEX e2f_m;
+  inline static CGAL_MUTEX cf_m;
+#endif
 protected:
   const TriangleMesh& tm_faces;
   const TriangleMesh& tm_edges;
@@ -129,6 +143,9 @@ public:
 
       if (orientation(a,b,c,get(vpmap_tme, target( next(eh, tm_edges), tm_edges)))==COPLANAR)
       {
+#ifdef CGAL_LINKED_WITH_TBB
+        CGAL_SCOPED_LOCK(cf_m);
+#endif
         coplanar_faces.insert(
             &tm_edges < &tm_faces // TODO can we avoid by reporting them in only of the two calls to the filter function?
             ? std::make_pair(face(eh, tm_edges), face(fh, tm_faces))
@@ -139,6 +156,9 @@ public:
       if (!is_border(eh_opp, tm_edges) &&
           orientation(a,b,c,get(vpmap_tme, target(next(eh_opp, tm_edges),tm_edges)))==COPLANAR)
       {
+#ifdef CGAL_LINKED_WITH_TBB
+        CGAL_SCOPED_LOCK(cf_m);
+#endif
         coplanar_faces.insert(
             &tm_edges < &tm_faces // TODO can we avoid by reporting them in only of the two calls to the filter function?
             ? std::make_pair(face(opposite(eh, tm_edges), tm_edges), face(fh, tm_faces))
@@ -149,6 +169,9 @@ public:
       return;
     }
     // non-coplanar case
+#ifdef CGAL_LINKED_WITH_TBB
+    CGAL_SCOPED_LOCK(e2f_m);
+#endif
     edge_to_faces[edge(eh,tm_edges)].insert(face(fh, tm_faces));
   }
 

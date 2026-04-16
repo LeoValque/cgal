@@ -211,8 +211,8 @@ int main(int argc, char* argv[])
   Mesh out;
   Visitor visitor;
 
-  // bool valid_union = PMP::corefine_and_compute_union (mesh1,mesh2, out, CGAL::parameters::visitor(visitor).concurrency_tag(CGAL::Parallel_if_available_tag()));
-  bool valid_union = PMP::corefine_and_compute_union (mesh1,mesh2, out, CGAL::parameters::visitor(visitor).concurrency_tag(CGAL::Sequential_tag()));
+  bool valid_union = PMP::corefine_and_compute_union (mesh1,mesh2, out, CGAL::parameters::visitor(visitor).concurrency_tag(CGAL::Parallel_if_available_tag()));
+  // bool valid_union = PMP::corefine_and_compute_union (mesh1,mesh2, out, CGAL::parameters::visitor(visitor).concurrency_tag(CGAL::Sequential_tag()));
 
   std::cout << "Global CPU timer = " << t.time() << " sec." << std::endl;
   std::cout << "Global Real timer = " << rt.time() << " sec." << std::endl;
