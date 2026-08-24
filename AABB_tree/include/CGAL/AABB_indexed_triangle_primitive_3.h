@@ -19,6 +19,7 @@
 
 #include <CGAL/AABB_primitive.h>
 #include <iterator>
+#include <optional>
 
 namespace CGAL {
 
@@ -36,20 +37,20 @@ struct Triangle_3_from_triangle_soup_property_map
 
   Triangle_3_from_triangle_soup_property_map(){}
   template <class PM=PointMap, std::enable_if_t<std::is_default_constructible_v<PM>, int> = 0>
-  Triangle_3_from_triangle_soup_property_map(const PointRange &pts_, const FaceRange &triangles_) : pts(&pts_), triangles(&triangles_){}
-  Triangle_3_from_triangle_soup_property_map(const PointRange &pts_, const FaceRange &triangles_, PointMap pmap) : pts(&pts_), triangles(&triangles_), pmap(pmap) {}
+  Triangle_3_from_triangle_soup_property_map(const PointRange &pts_, const FaceRange &triangles_) : pts(&pts_), triangles(&triangles_), pmap(std::make_optional(PointMap())){}
+  Triangle_3_from_triangle_soup_property_map(const PointRange &pts_, const FaceRange &triangles_, PointMap pmap) : pts(&pts_), triangles(&triangles_), pmap(std::make_optional(pmap)) {}
 
   inline friend value_type
   get(const Self &s, const key_type &i)
   {
-    return GeomTraits().construct_triangle_3_object()(get(s.pmap, (*s.pts)[(*s.triangles)[i][0]]),
-                                                      get(s.pmap, (*s.pts)[(*s.triangles)[i][1]]),
-                                                      get(s.pmap, (*s.pts)[(*s.triangles)[i][2]]));
+    return GeomTraits().construct_triangle_3_object()(get(*s.pmap, (*s.pts)[(*s.triangles)[i][0]]),
+                                                      get(*s.pmap, (*s.pts)[(*s.triangles)[i][1]]),
+                                                      get(*s.pmap, (*s.pts)[(*s.triangles)[i][2]]));
   }
 
   const PointRange *pts;
   const FaceRange *triangles;
-  PointMap pmap;
+  std::optional<PointMap> pmap;
 };
 
 template <class GeomTraits, class PointRange, class FaceRange, class PointMap>
@@ -64,27 +65,27 @@ struct Reference_point_from_triangle_soup_property_map
 
   Reference_point_from_triangle_soup_property_map(){}
   template <class PM=PointMap, std::enable_if_t<std::is_default_constructible_v<PM>, int> = 0>
-  Reference_point_from_triangle_soup_property_map(const PointRange &pts_, const FaceRange &triangles_) : pts(&pts_), triangles(&triangles_){}
-  Reference_point_from_triangle_soup_property_map(const PointRange &pts_, const FaceRange &triangles_, PointMap pmap) : pts(&pts_), triangles(&triangles_), pmap(pmap) {}
+  Reference_point_from_triangle_soup_property_map(const PointRange &pts_, const FaceRange &triangles_) : pts(&pts_), triangles(&triangles_), pmap(std::make_optional(PointMap())){}
+  Reference_point_from_triangle_soup_property_map(const PointRange &pts_, const FaceRange &triangles_, PointMap pmap) : pts(&pts_), triangles(&triangles_), pmap(std::make_optional(pmap)) {}
 
   inline friend value_type
   get(const Self &s, const key_type &i)
   {
-    return get(s.pmap, (*s.pts)[(*s.triangles)[i][0]]);
+    return get(*s.pmap, (*s.pts)[(*s.triangles)[i][0]]);
   }
 
   const PointRange *pts;
   const FaceRange *triangles;
-  PointMap pmap;
+  std::optional<PointMap> pmap;
 };
 }//namespace internal
 
 
 /*!
  * \ingroup PkgAABBTreeRef
- * Primitive type that uses as identifier an iterator with a range of three indices as `value_type`.
- * The iterator from which the primitive is built should not be invalided
- * while the AABB tree holding the primitive is in use.
+ * Primitive type that uses as an identifier an index into a range of triplets of indices as its `value_type`.
+ * The range of triplets and the range of points must not be invalidated
+ * while the AABB tree holding this primitive is in use.
  *
  * \cgalModels{AABBPrimitive}
  *
@@ -96,7 +97,7 @@ struct Reference_point_from_triangle_soup_property_map
  * \tparam CacheDatum is either `CGAL::Tag_true` or `CGAL::Tag_false`. In the former case,
  *         the datum is stored in the primitive, while in the latter it is
  *         constructed on the fly to reduce the memory footprint.
- *         The default is `CGAL::Tag_false` (datum is not stored).
+ *         The default is `CGAL::Tag_false`, that is the datum is not stored.
  * \tparam PointMap is a model of `ReadablePropertyMap` with its key type being the value type of `PointRange` and the value type being a `Point_3`.
  *         The default is \link Identity_property_map `CGAL::Identity_property_map`\endlink<PointRange::value_type>.
  *

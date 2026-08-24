@@ -46,10 +46,19 @@ namespace AABB_trees {
   ///   \cgalParamNEnd
   ///   \cgalParamNBegin{transformation}
   ///     \cgalParamDescription{An affine transformation apply to `tree1` (`tree2`)}
-  ///     \cgalParamType{`CGAL::Aff_transformation_3<Kernel>` where `Kernel` is the kernel associated with `AABBTree1::AABB_traits::Point` (`AABBTree2::AABB_traits::Point`)}
+  ///     \cgalParamType{`CGAL::Aff_transformation_3<Kernel>` where `Kernel` is deduced from `AABBTree1::AABB_traits::Point`, using `Kernel_traits`}
   ///     \cgalParamDefault{An identity transformation}
   ///   \cgalParamNEnd
+  ///   \cgalParamNBegin{use_inverse_transformation}
+  ///     \cgalParamDescription{If true, the inverse of the transformations are used to accelerate the queries.
+  ///     \cgalParamType{`CGAL::Tag_true` or `CGAL::Tag_false`}
+  ///     \cgalParamDefault{`CGAL::Tag_true`}
+  ///     \cgalParamExtra{The result may be less accurate than using the original transformations.}
+  ///     \cgalParamExtra{`np1` only}
+  ///   \cgalParamNEnd
   /// \cgalNamedParamsEnd
+  ///
+  /// \warning The `Do_intersect` functors of the `AABBTraits` of both AABB trees should accept the Datum type of the other tree as the Query type.
   ///
   /// \return `true` if at least one primitive of `tree1` intersects
   /// a primitive of `tree2`, and `false` otherwise.
@@ -71,6 +80,16 @@ namespace AABB_trees {
                                           Sequential_tag
                                         > ::type;
 
+    // Early exit if one of the trees is empty
+    if(tree1.empty() || tree2.empty())
+      return false;
+
+    using Inverse_tag = typename internal_np::Lookup_named_param_def <
+                                          internal_np::use_inverse_transformation_t,
+                                          NamedParameters1,
+                                          Tag_true
+                                        > ::type;
+
     if constexpr(is_default_parameter<NamedParameters1, internal_np::transformation_t>::value &&
                  is_default_parameter<NamedParameters2, internal_np::transformation_t>::value)
     {
@@ -89,7 +108,7 @@ namespace AABB_trees {
       Aff_tr tr2 = choose_parameter(get_parameter(np2, internal_np::transformation), Aff_tr(Identity_transformation()));
       CGAL::internal::AABB_tree::Two_trees_do_intersect_traits_with_transformation<typename AABBTree1::AABB_traits,
                                                                                    typename AABBTree2::AABB_traits,
-                                                                                   Aff_tr, false>
+                                                                                   Aff_tr, false, Inverse_tag>
                                                         traversal_traits(tree1.traits(), tree2.traits(), tr1, tr2);
       CGAL::internal::AABB_tree::two_trees_traversal(tree1, tree2, traversal_traits);
       return traversal_traits.is_intersection_found();
@@ -98,9 +117,9 @@ namespace AABB_trees {
 
   /// \ingroup PkgAABBTreeRef
   ///
-  /// \brief Computes all pairs of intersecting primitive from two AABB trees.
+  /// \brief computes all pairs of intersecting primitive from two AABB trees.
   ///
-  /// Traverses both trees and outputs all pairs of primitives that intersect.
+  /// Both trees are traversed and all pairs of primitives that intersect are collected.
   /// Each output element is a pair `(id1, id2)` where:
   ///       - `id1` is the ID of a primitive from `tree1`
   ///       - `id2` is the ID of a primitive from `tree2`
@@ -146,6 +165,10 @@ namespace AABB_trees {
                                           Sequential_tag
                                         > ::type;
 
+    // Early exit if one of the trees is empty
+    if(tree1.empty() || tree2.empty())
+      return;
+
     if constexpr(is_default_parameter<NamedParameters1, internal_np::transformation_t>::value &&
                  is_default_parameter<NamedParameters2, internal_np::transformation_t>::value)
     {
@@ -171,7 +194,7 @@ namespace AABB_trees {
 
   /// \ingroup PkgAABBTreeRef
   ///
-  /// \brief Computes all pairs of primitives from a single AABB tree that are intersecting.
+  /// \brief computes all pairs of primitives from a single AABB tree that are intersecting.
   ///
   /// \note Whether two objects that share a common subfeature (e.g., two triangles sharing an edge) are considered to intersect depends on the primitive type used.
   ///
