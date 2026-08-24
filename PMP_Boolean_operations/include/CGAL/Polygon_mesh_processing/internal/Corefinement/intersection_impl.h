@@ -239,8 +239,57 @@ class Intersection_of_triangle_meshes
 
 // member functions
 
+  template <class RPM>
+  struct Split_primitives
+  {
+    Split_primitives(RPM rpm)
+      : rpm(rpm)
+    {}
+
+    template<typename PrimitiveIterator>
+    void operator()(PrimitiveIterator first,
+                    PrimitiveIterator beyond,
+                    const CGAL::Bbox_3& bbox) const
+      {
+        auto longest_axis=[](const CGAL::Bbox_3& bbox){
+          const double dx = bbox.xmax() - bbox.xmin();
+          const double dy = bbox.ymax() - bbox.ymin();
+          const double dz = bbox.zmax() - bbox.zmin();
+          return (dx>=dy) ? ((dx>=dz) ? 0 : 2) : ((dy>=dz) ? 1 : 2);
+        };
+
+        PrimitiveIterator middle = first + (beyond - first)/2;
+        typedef typename std::iterator_traits<PrimitiveIterator>::value_type Primitive;
+        const int crd=longest_axis(bbox);
+        const RPM& l_rpm=rpm;
+        std::nth_element(first, middle, beyond,
+                        [l_rpm, crd](const Primitive& p1, const Primitive& p2){ return get(l_rpm, p1.id())[crd] < get(l_rpm, p2.id())[crd];});
+      }
+    RPM rpm;
+  };
+
+  template <class BBM>
+  struct Compute_bbox {
+    Compute_bbox(const BBM& bbm)
+      : bbm(bbm)
+    {}
+
+    template<typename ConstPrimitiveIterator>
+    CGAL::Bbox_3 operator()(ConstPrimitiveIterator first,
+                            ConstPrimitiveIterator beyond) const
+    {
+      CGAL::Bbox_3 bbox = get(bbm, first->id());
+      for(++first; first != beyond; ++first)
+      {
+        bbox += get(bbm, first->id());
+      }
+      return bbox;
+    }
+    BBM bbm;
+  };
+
   // template <class Concurrency_tag = Sequential_tag, class VPMA, class VPMB>
-  template <class VPMA, class VPMB>
+  template <class ConcurrencyTag=Sequential_tag, class VPMA, class VPMB>
   void filter_intersections(const TriangleMesh& tm1,
                             const TriangleMesh& tm2,
                             const VPMA& vpm1,
@@ -290,7 +339,7 @@ class Intersection_of_triangle_meshes
       std::cout << "Building AABB tree " << t.time() << std::endl;
 
       tbb::concurrent_vector<std::pair<face_descriptor, face_descriptor>> inter;
-      CGAL::AABB_trees::all_pairs_of_intersecting_primitives<Concurrency_tag>(tree1, tree2, std::back_inserter(inter));
+      CGAL::AABB_trees::all_pairs_of_intersecting_primitives(tree1, tree2, std::back_inserter(inter), parameters::concurrency_tag(ConcurrencyTag()));
 
       std::cout << "Compute " << inter.size() << " candidates " << t.time() << std::endl;
       // for(const auto& [f_1, f_2]: inter){

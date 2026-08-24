@@ -273,18 +273,11 @@ struct AABB_tree_build_helper
     void operator()(PrimitiveIterator first,
                     PrimitiveIterator beyond,
                     const CGAL::Bbox_3& bbox) const
-      {
-        auto longest_axis=[](const CGAL::Bbox_3& bbox){
-          const double dx = bbox.x_span();
-          const double dy = bbox.y_span();
-          const double dz = bbox.z_span();
-          return (dx>=dy) ? ((dx>=dz) ? 0 : 2) : ((dy>=dz) ? 1 : 2);
-        };
-
-        PrimitiveIterator middle = first + (beyond - first)/2;
-        const int crd=longest_axis(bbox);
-        std::nth_element(first, middle, beyond, [this, crd](const Primitive& p1, const Primitive& p2){ return get(rpm, p1.id())[crd] < get(rpm, p2.id())[crd];});
-      }
+    {
+      PrimitiveIterator middle = first + (beyond - first)/2;
+      const int crd=largest_span_index(bbox);
+      std::nth_element(first, middle, beyond, [this, crd](const Primitive& p1, const Primitive& p2){ return get(rpm, p1.id())[crd] < get(rpm, p2.id())[crd];});
+    }
     const RPM &rpm;
   };
 
@@ -315,8 +308,6 @@ struct AABB_tree_build_helper
     using VPM_kernel = typename Kernel_traits<typename boost::property_traits<VertexPointMap>::value_type>::Kernel;
     CGAL::Cartesian_converter<VPM_kernel, Epick> to_input;
 
-    CGAL::Real_timer t;
-    t.start();
     Bbox_map bb_map = get(Face_bbox_tag(), tm);
     Ref_point_map rp_map = get(Face_ref_point_tag(), tm);
 
@@ -1327,12 +1318,6 @@ void append_patches_to_triangle_mesh(
         vertex_descriptor tgt = target(h, tm);
         if (reverse_patch_orientation) std::swap(src, tgt);
 
-        // if ( !patch.interior_vertices.count(src) )
-        //   border_halfedges_source_to_link.push_back(helper.get_hedge(h));
-        // if ( !patch.interior_vertices.count(tgt) ){
-        //   border_halfedges_target_to_link.push_back(helper.get_hedge(h));
-        //   continue; // since the next halfedge should not be in the same patch
-        // }
         CGAL_assertion( is_border(h, tm) &&
                         is_border(prev(h, tm),tm) &&
                         is_border(next(h, tm),tm));

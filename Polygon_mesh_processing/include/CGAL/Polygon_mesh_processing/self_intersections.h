@@ -28,7 +28,6 @@
 #include <CGAL/Bbox_3.h>
 #include <CGAL/boost/graph/helpers.h>
 #include <CGAL/boost/graph/properties.h>
-#include <CGAL/box_intersection_d.h>
 #include <CGAL/exceptions.h>
 #include <CGAL/intersections.h>
 #include <CGAL/iterator.h>
@@ -51,9 +50,43 @@
 #include <typeinfo>
 #include <vector>
 
+// #include <CGAL/Polygon_mesh_processing/internal/Corefinement/face_graph_utils.h>
+// #include "/home/oem/CGAL/git/PMP-bool_ops_parallellisation/PMP_Boolean_operations/include/CGAL/Polygon_mesh_processing/internal/Corefinement/face_graph_utils.h"
+#include <CGAL/AABB_tree.h>
+#include <CGAL/AABB_traits_3.h>
+#include <CGAL/AABB_indexed_triangle_primitive_3.h>
+#include <CGAL/AABB_trees/intersection.h>
+
 namespace CGAL {
 namespace Polygon_mesh_processing {
 namespace internal {
+
+#ifndef DOXYGEN_RUNNING
+template <class PointRange, class VPM>
+struct Property_map_for_soup
+{
+  typedef VPM VPM_base;
+  typedef std::size_t key_type;
+  typedef typename boost::property_traits<VPM>::value_type value_type;
+  //typedef typename boost::property_traits<VPM>::category category;
+  typedef boost::readable_property_map_tag category;
+  typedef typename boost::property_traits<VPM>::reference reference;
+
+  const PointRange& points;
+  VPM vpm;
+
+  Property_map_for_soup(const PointRange& points, VPM vpm)
+    : points(points)
+    , vpm(vpm)
+  {}
+
+  inline friend
+  reference get(const Property_map_for_soup<PointRange, VPM>& map, key_type k)
+  {
+    return get(map.vpm, map.points[k]);
+  }
+};
+#endif
 
 template <class TM>
 struct Triangle_mesh_and_triangle_soup_wrapper
@@ -112,6 +145,89 @@ struct Triangle_mesh_and_triangle_soup_wrapper<
   typedef std::size_t vertex_descriptor;
 
   typedef std::pair<const PointRange&, const TriangleRange& > Soup;
+
+  template<class GT, class VertexPointMap>
+  using Primitive = AABB_indexed_triangle_primitive_3<GT, PointRange, TriangleRange, Tag_false, typename VertexPointMap::VPM_base>;
+  template<class GT, class VertexPointMap>
+  using Tree = AABB_tree<AABB_traits_3<GT, Primitive<GT, VertexPointMap>>>;
+
+  template <class RPM>
+  struct Split_primitives
+  {
+    Split_primitives(const RPM &rpm): rpm(rpm){}
+
+    template<typename PrimitiveIterator>
+    void operator()(PrimitiveIterator first,
+                    PrimitiveIterator beyond,
+                    const CGAL::Bbox_3& bbox) const
+      {
+        PrimitiveIterator middle = first + (beyond - first)/2;
+        const int crd = bbox.largest_span_index();
+        std::nth_element(first, middle, beyond, [this, crd](const auto& p1, const auto& p2){ return get(rpm, p1.id())[crd] < get(rpm, p2.id())[crd];});
+      }
+    const RPM &rpm;
+  };
+
+  // For exact side_of_triangle_mesh
+  template <class BPM>
+  struct Compute_bbox {
+    Compute_bbox(const BPM& bpm): bpm(bpm){}
+
+    template<typename ConstPrimitiveIterator>
+    CGAL::Bbox_3 operator()(ConstPrimitiveIterator first,
+                            ConstPrimitiveIterator beyond) const
+    {
+      CGAL::Bbox_3 bbox = get(bpm, first->id());
+      for(++first; first != beyond; ++first)
+        bbox += get(bpm, first->id());
+      return bbox;
+    }
+    BPM bpm;
+  };
+
+  template<class Concurrency_tag=Sequential_tag, class FaceRange, class GT, class VertexPointMap>
+  static void build_tree(const FaceRange &face_range, Tree<GT, VertexPointMap>& tree, const Soup& soup, VertexPointMap vpm){
+    using PM_kernel = typename Kernel_traits<typename boost::property_traits<VertexPointMap>::value_type>::Kernel;
+    using Bbox_map = Pointer_property_map<Bbox_3>::type;
+    using Ref_point_map = Pointer_property_map<Epick::Point_3>::type;
+
+    CGAL::Cartesian_converter<PM_kernel, Epick> to_input;
+
+    const auto& points = soup.first;
+    const auto& triangles = soup.second;
+
+    tree.insert(face_range.begin(), face_range.end(), points, triangles, vpm.vpm);
+
+    std::vector<Bbox_3> bb_vector(triangles.size(), Bbox_3());
+    std::vector<Epick::Point_3> rp_vector(triangles.size(), Epick::Point_3());
+    Bbox_map bb_map = make_property_map(bb_vector);
+    Ref_point_map rp_map = make_property_map(rp_vector);
+
+#ifdef CGAL_LINKED_WITH_TBB
+    if constexpr(std::is_same_v<Concurrency_tag, Parallel_tag>)
+    {
+      tbb::parallel_for(std::size_t(0), face_range.size(), [&](std::size_t i){
+        i = face_range[i];
+        put(bb_map, i, get(vpm, triangles[i][0]).bbox() +
+                       get(vpm, triangles[i][1]).bbox() +
+                       get(vpm, triangles[i][2]).bbox());
+        put(rp_map, i, to_input(get(vpm, triangles[i][0])) );
+      });
+    }
+    else
+#endif
+    {
+      for(std::size_t i: face_range){
+        put(bb_map, i, get(vpm, triangles[i][0]).bbox() +
+                       get(vpm, triangles[i][1]).bbox() +
+                       get(vpm, triangles[i][2]).bbox());
+        put(rp_map, i, to_input(get(vpm, triangles[i][0])) );
+      }
+    }
+    Compute_bbox<Bbox_map> compute_bbox(bb_map);
+    Split_primitives<Ref_point_map> split_primitives(rp_map);
+    tree.template custom_build<Concurrency_tag>(compute_bbox, split_primitives);
+  }
 
   static void get_face_vertices(face_descriptor fd, std::array<vertex_descriptor,3>& vh, const Soup& soup)
   {
@@ -186,30 +302,34 @@ struct Triangle_mesh_and_triangle_soup_wrapper<
   }
 };
 
-template<typename Output_iterator>
-struct Throw_at_count_reached_functor {
+template<typename OutputIterator>
+struct Throw_at_count_reached_output_iterator
+{
+  using Self = Throw_at_count_reached_output_iterator<OutputIterator>;
+  std::atomic<unsigned int> &counter;
+  const unsigned int &maxval;
+  OutputIterator out;
 
-  std::atomic<unsigned int>& counter;
-  const unsigned int& maxval;
-
-  Output_iterator out;
-
-  Throw_at_count_reached_functor(std::atomic<unsigned int>& counter,
-                                 const unsigned int& maxval,
-                                 Output_iterator out)
+  using iterator_category = std::output_iterator_tag;
+  Throw_at_count_reached_output_iterator(std::atomic<unsigned int> &counter,
+                                         const unsigned int &maxval,
+                                         OutputIterator out)
     : counter(counter), maxval(maxval), out(out)
   {}
 
   template<class T>
-  void operator()(const T& t )
+  Self& operator=(const T& t)
   {
     *out++ = t;
     ++counter;
     if(counter >= maxval)
-    {
       throw CGAL::internal::Throw_at_output_exception();
-    }
+    return *this;
   }
+
+  Self& operator*(){ return *this; }
+  Self& operator++(){ return *this; }
+  Self& operator++(int){ return *this; }
 };
 
 // Checks for 'real' intersections, i.e. not simply a shared vertex or edge
@@ -306,16 +426,19 @@ bool do_faces_intersect(typename Triangle_mesh_and_triangle_soup_wrapper<TM>::fa
   return false;
 }
 
-template <class Box, class TM, class VPM, class GT,
+template <class TM, class VPM, class GT,
           class OutputIterator>
 struct Strict_intersect_faces // "strict" as in "not sharing a subface"
 {
+  using Self = Strict_intersect_faces<TM, VPM, GT, OutputIterator>;
+
   mutable OutputIterator m_iterator;
   const TM& m_tmesh;
   const VPM m_vpmap;
   typename GT::Construct_segment_3 m_construct_segment;
   typename GT::Construct_triangle_3 m_construct_triangle;
   typename GT::Do_intersect_3 m_do_intersect;
+  typedef typename Triangle_mesh_and_triangle_soup_wrapper<TM>::face_descriptor face_descriptor;
 
   Strict_intersect_faces(const TM& tmesh, VPM vpmap, const GT& gt, OutputIterator it)
     :
@@ -327,11 +450,20 @@ struct Strict_intersect_faces // "strict" as in "not sharing a subface"
       m_do_intersect(gt.do_intersect_3_object())
   {}
 
-  void operator()(const Box* b, const Box* c) const
+  void operator()(face_descriptor a, face_descriptor b) const
   {
-    if(do_faces_intersect<GT>(b->info(), c->info(), m_tmesh, m_vpmap, m_construct_segment, m_construct_triangle, m_do_intersect))
-      *m_iterator++ = std::make_pair(b->info(), c->info());
+    if(do_faces_intersect<GT>(a, b, m_tmesh, m_vpmap, m_construct_segment, m_construct_triangle, m_do_intersect))
+      *m_iterator++ = std::make_pair(a, b);
   }
+
+  Self& operator=(const std::pair<face_descriptor, face_descriptor>& p)
+  {
+    operator()(p.first, p.second);
+    return *this;
+  }
+  Self& operator*(){ return *this; }
+  Self& operator++(){ return *this; }
+  Self& operator++(int){ return *this; }
 };
 
 template <class ConcurrencyTag,
@@ -358,16 +490,14 @@ self_intersections_impl(const FaceRange& face_range,
   typedef typename Wrapper::face_descriptor                                              face_descriptor;
   typedef typename Wrapper::vertex_descriptor                                            vertex_descriptor;
 
-  typedef CGAL::Box_intersection_d::ID_FROM_BOX_ADDRESS                                  Box_policy;
-  typedef CGAL::Box_intersection_d::Box_with_info_d<double, 3, face_descriptor, Box_policy> Box;
-
   typedef typename GetGeomTraits<TM, NamedParameters>::type                              GT;
   GT gt = choose_parameter<GT>(get_parameter(np, internal_np::geom_traits));
 
-  typedef GetVertexPointMap<TM, NamedParameters>                                  VPM_helper;
+  typedef GetVertexPointMap<TM, NamedParameters>                                         VPM_helper;
   typedef typename VPM_helper::const_type                                                VPM;
   VPM vpmap = VPM_helper::get_const_map(np, tmesh);
 
+  typedef typename Wrapper::Tree<GT, VPM>                                                AABB_tree;
   const bool do_limit = !(is_default_parameter<NamedParameters, internal_np::maximum_number_t>::value);
   const unsigned int maximum_number = choose_parameter(get_parameter(np, internal_np::maximum_number), 0);
   if(do_limit && maximum_number == 0)
@@ -375,62 +505,19 @@ self_intersections_impl(const FaceRange& face_range,
     return out;
   }
   unsigned int counter = 0;
-  const unsigned int seed = choose_parameter(get_parameter(np, internal_np::random_seed), 0);
-  CGAL_USE(seed); // used in the random shuffle of the range, which is only done to balance tasks in parallel
 
-  const std::ptrdiff_t cutoff = 2000;
-
-  // make one box per face
-  std::vector<Box> boxes;
-  boxes.reserve(std::distance(std::begin(face_range), std::end(face_range)));
-
-  // This loop is very cheap, so there is hardly anything to gain from parallelizing it
-  for(face_descriptor f : face_range)
-  {
-    std::array<vertex_descriptor, 3> vh;
-    Wrapper::get_face_vertices(f, vh, tmesh);
-
-    typename boost::property_traits<VPM>::reference
-      p = get(vpmap, vh[0]),
-      q = get(vpmap, vh[1]),
-      r = get(vpmap, vh[2]);
-
-    // tiny fixme: if f is degenerate, we might still have a real intersection between f
-    // and another face f', but right now we are not creating a box for f and thus not returning those
-    if(collinear(p, q, r))
-    {
-      if(throw_on_SI)
-        throw CGAL::internal::Throw_at_output_exception();
-      else
-      {
-        *out++= std::make_pair(f, f);
-        ++counter;
-        if(do_limit && counter == maximum_number)
-        {
-          return out;
-        }
-      }
-    }
-    else
-    {
-      boxes.push_back(Box(p.bbox() + q.bbox() + r.bbox(), f));
-    }
-  }
-
-  // generate box pointers
-  std::vector<const Box*> box_ptr;
-  box_ptr.reserve(boxes.size());
-
-  for(Box& b : boxes)
-    box_ptr.push_back(&b);
+  // TODO check degeneracies if throw on SI
 
   // In case we are throwing, like in `does_self_intersect()`, we keep the geometric test to throw ASAP.
   // This is obviously not optimal if there are no or few self-intersections: it would be a greater speed-up
   // to do the same as for `self_intersections()`. However, doing like `self_intersections()` would
   // be a major slow-down over sequential code if there are a lot of self-intersections...
-  typedef boost::function_output_iterator<CGAL::internal::Throw_at_output>               Throwing_output_iterator;
-  typedef internal::Strict_intersect_faces<Box, TM, VPM, GT, Throwing_output_iterator>   Throwing_filter;
+  typedef boost::function_output_iterator<CGAL::internal::Throw_at_output>          Throwing_output_iterator;
+  typedef internal::Strict_intersect_faces<TM, VPM, GT, Throwing_output_iterator>   Throwing_filter;
   Throwing_filter throwing_filter(tmesh, vpmap, gt, Throwing_output_iterator());
+
+  AABB_tree tree;
+  Wrapper::template build_tree<ConcurrencyTag>(face_range, tree, tmesh, vpmap);
 
 #if !defined(CGAL_LINKED_WITH_TBB)
   static_assert (!(std::is_convertible<ConcurrencyTag, Parallel_tag>::value),
@@ -438,33 +525,26 @@ self_intersections_impl(const FaceRange& face_range,
 #else
   if(std::is_convertible<ConcurrencyTag, Parallel_tag>::value)
   {
-    // We are going to split the range into a number of smaller ranges. To handle
-    // smaller trees of roughly the same size, we first apply a random shuffle to the range
-    CGAL::Random rng(seed);
-    CGAL::cpp98::random_shuffle(box_ptr.begin(), box_ptr.end(), rng);
-
     // Write in a concurrent vector all pairs that intersect
-    typedef tbb::concurrent_vector<std::pair<face_descriptor, face_descriptor> >         Face_pairs;
-    typedef std::back_insert_iterator<Face_pairs>                                        Face_pairs_back_inserter;
-    typedef internal::Strict_intersect_faces<Box, TM, VPM, GT, Face_pairs_back_inserter> Intersecting_faces_filter;
+    using Face_pairs = tbb::concurrent_vector<std::pair<face_descriptor, face_descriptor> >;
+    using Face_pairs_inserter = std::back_insert_iterator<Face_pairs>;
+    using Intersecting_faces_filter = internal::Strict_intersect_faces<TM, VPM, GT, Face_pairs_inserter>;
     //for maximum_number
-    typedef internal::Throw_at_count_reached_functor<Face_pairs_back_inserter>           Throw_functor;
-    typedef boost::function_output_iterator<Throw_functor>                               Throwing_after_count_output_iterator;
-    typedef internal::Strict_intersect_faces<Box, TM, VPM,
-        GT,Throwing_after_count_output_iterator>                                         Filtered_intersecting_faces_filter;
+    using Throw_iterator = internal::Throw_at_count_reached_output_iterator<Face_pairs_inserter>;
+    using Filtered_intersecting_faces_filter = internal::Strict_intersect_faces<TM, VPM, GT, Throw_iterator>;
 
     Face_pairs face_pairs;
     if(throw_on_SI)
-      CGAL::box_self_intersection_d<ConcurrencyTag>(box_ptr.begin(), box_ptr.end(), throwing_filter, cutoff);
+      AABB_trees::all_pairs_of_intersecting_primitives(tree, throwing_filter);
     else if(do_limit)
     {
       try
       {
         std::atomic<unsigned int> atomic_counter(counter);
-        Throw_functor throwing_count_functor(atomic_counter, maximum_number, std::back_inserter(face_pairs));
-        Throwing_after_count_output_iterator count_filter(throwing_count_functor);
-         Filtered_intersecting_faces_filter limited_callback(tmesh, vpmap, gt, count_filter);
-        CGAL::box_self_intersection_d<ConcurrencyTag>(box_ptr.begin(), box_ptr.end(), limited_callback, cutoff);
+        Throw_iterator throwing_count(atomic_counter, maximum_number, std::back_inserter(face_pairs));
+        Throw_at_count_reached_output_iterator count_filter(throwing_count);
+        Filtered_intersecting_faces_filter limited_callback(tmesh, vpmap, gt, count_filter);
+        AABB_trees::all_pairs_of_intersecting_primitives(tree, limited_callback);
       }
       catch(const CGAL::internal::Throw_at_output_exception&)
       {
@@ -476,7 +556,7 @@ self_intersections_impl(const FaceRange& face_range,
     else
     {
       Intersecting_faces_filter callback(tmesh, vpmap, gt, std::back_inserter(face_pairs));
-      CGAL::box_self_intersection_d<ConcurrencyTag>(box_ptr.begin(), box_ptr.end(), callback, cutoff);
+      AABB_trees::all_pairs_of_intersecting_primitives(tree, callback);
     }
 
     // Sequentially write into the output iterator
@@ -485,41 +565,41 @@ self_intersections_impl(const FaceRange& face_range,
 
     return out;
   }
-#endif
-
-  // Sequential version of the code
-  // Compute self-intersections filtered out by boxes
-  typedef internal::Strict_intersect_faces<Box, TM, VPM, GT, FacePairOutputIterator> Intersecting_faces_filter;
-  Intersecting_faces_filter intersect_faces(tmesh, vpmap, gt, out);
-
-  if(throw_on_SI)
-    CGAL::box_self_intersection_d<CGAL::Sequential_tag>(box_ptr.begin(), box_ptr.end(), throwing_filter, cutoff);
-  else if(do_limit)
-  {
-    typedef std::function<void(const std::pair<face_descriptor, face_descriptor>&) > Count_and_throw_filter;
-    std::size_t nbi=0;
-    Count_and_throw_filter max_inter_counter = [&nbi, maximum_number, &out](const std::pair<face_descriptor, face_descriptor>& f_pair)
-    {
-      *out++=f_pair;
-      if (++nbi == maximum_number)
-        throw CGAL::internal::Throw_at_output_exception();
-    };
-    typedef internal::Strict_intersect_faces<Box, TM, VPM, GT, boost::function_output_iterator<Count_and_throw_filter > > Intersecting_faces_limited_filter;
-    Intersecting_faces_limited_filter limited_intersect_faces(tmesh, vpmap, gt,
-                                                      boost::make_function_output_iterator(max_inter_counter));
-    try
-    {
-      CGAL::box_self_intersection_d<CGAL::Sequential_tag>(box_ptr.begin(), box_ptr.end(), limited_intersect_faces, cutoff);
-    }
-    catch (const CGAL::internal::Throw_at_output_exception&)
-    {
-      return out;
-    }
-  }
   else
-    CGAL::box_self_intersection_d<CGAL::Sequential_tag>(box_ptr.begin(), box_ptr.end(), intersect_faces, cutoff);
+#endif
+  {
+    // Sequential version of the code
+    // Compute self-intersections filtered out by boxes
+    typedef internal::Strict_intersect_faces<TM, VPM, GT, FacePairOutputIterator> Intersecting_faces_filter;
+    Intersecting_faces_filter intersect_faces(tmesh, vpmap, gt, out);
 
-  return intersect_faces.m_iterator;
+    if(throw_on_SI)
+      AABB_trees::all_pairs_of_intersecting_primitives(tree, throwing_filter);
+    else if(do_limit)
+    {
+      typedef std::function<void(const std::pair<face_descriptor, face_descriptor>&) > Count_and_throw_filter;
+      std::size_t nbi=0;
+      Count_and_throw_filter max_inter_counter = [&nbi, maximum_number, &out](const std::pair<face_descriptor, face_descriptor>& f_pair)
+      {
+        *out++=f_pair;
+        if (++nbi == maximum_number)
+          throw CGAL::internal::Throw_at_output_exception();
+      };
+      typedef internal::Strict_intersect_faces<TM, VPM, GT, boost::function_output_iterator<Count_and_throw_filter > > Intersecting_faces_limited_filter;
+      Intersecting_faces_limited_filter limited_intersect_faces(tmesh, vpmap, gt, boost::make_function_output_iterator(max_inter_counter));
+      try
+      {
+        AABB_trees::all_pairs_of_intersecting_primitives(tree, limited_intersect_faces);
+      }
+      catch (const CGAL::internal::Throw_at_output_exception&)
+      {
+        return out;
+      }
+    }
+    else
+      AABB_trees::all_pairs_of_intersecting_primitives(tree, out);
+    return out;
+  }
 }
 
 } // namespace internal
@@ -777,33 +857,6 @@ bool does_self_intersect(const TriangleMesh& tmesh,
   return does_self_intersect<ConcurrencyTag>(faces(tmesh), tmesh, np);
 }
 
-
-#ifndef DOXYGEN_RUNNING
-template <class PointRange, class VPM>
-struct Property_map_for_soup
-{
-  typedef std::size_t key_type;
-  typedef typename boost::property_traits<VPM>::value_type value_type;
-  //typedef typename boost::property_traits<VPM>::category category;
-  typedef boost::readable_property_map_tag category;
-  typedef typename boost::property_traits<VPM>::reference reference;
-
-  const PointRange& points;
-  VPM vpm;
-
-  Property_map_for_soup(const PointRange& points, VPM vpm)
-    : points(points)
-    , vpm(vpm)
-  {}
-
-  inline friend
-  reference get(const Property_map_for_soup<PointRange, VPM>& map, key_type k)
-  {
-    return get(map.vpm, map.points[k]);
-  }
-};
-#endif
-
 /**
  * \ingroup PMP_intersection_grp
  *
@@ -879,7 +932,7 @@ triangle_soup_self_intersections(const PointRange& points,
 
   typedef typename CGAL::GetPointMap<PointRange, CGAL_NP_CLASS>::const_type Point_map_base;
   Point_map_base pm_base = choose_parameter<Point_map_base>(get_parameter(np, internal_np::point_map));
-  typedef Property_map_for_soup<PointRange, Point_map_base> Point_map;
+  typedef internal::Property_map_for_soup<PointRange, Point_map_base> Point_map;
   typedef typename GetPolygonSoupGeomTraits<PointRange, CGAL_NP_CLASS>::type GT;
   GT gt = choose_parameter<GT>(get_parameter(np, internal_np::geom_traits));
 
@@ -890,6 +943,7 @@ triangle_soup_self_intersections(const PointRange& points,
                                               std::make_pair(std::cref(points), std::cref(triangles)),
                                               out,
                                               parameters::vertex_point_map(Point_map(points,pm_base)).
+                                              // parameters::vertex_point_map(pm_base).
                                               geom_traits(gt).
                                               maximum_number(choose_parameter(get_parameter(np, internal_np::maximum_number), 0)));
   }
@@ -898,6 +952,7 @@ triangle_soup_self_intersections(const PointRange& points,
                                             std::make_pair(std::cref(points), std::cref(triangles)),
                                             out,
                                             parameters::vertex_point_map(Point_map(points,pm_base)).
+                                            // parameters::vertex_point_map(pm_base).
                                             geom_traits(gt));
 }
 
@@ -962,7 +1017,7 @@ bool does_triangle_soup_self_intersect(const PointRange& points,
     CGAL::Emptyset_iterator unused_out;
     typedef typename CGAL::GetPointMap<PointRange, CGAL_NP_CLASS>::const_type Point_map_base;
     Point_map_base pm_base = choose_parameter<Point_map_base>(get_parameter(np, internal_np::point_map));
-    typedef Property_map_for_soup<PointRange, Point_map_base> Point_map;
+    typedef internal::Property_map_for_soup<PointRange, Point_map_base> Point_map;
     typedef typename GetPolygonSoupGeomTraits<PointRange, CGAL_NP_CLASS>::type GT;
     GT gt = choose_parameter<GT>(get_parameter(np, internal_np::geom_traits));
 
@@ -970,6 +1025,7 @@ bool does_triangle_soup_self_intersect(const PointRange& points,
                                                       std::make_pair(std::cref(points), std::cref(triangles)),
                                                       unused_out, true /*throw*/,
                                                       parameters::vertex_point_map(Point_map(points,pm_base))
+                                                      // parameters::vertex_point_map(pm_base)
                                                                  .geom_traits(gt));
   }
   catch (const CGAL::internal::Throw_at_output_exception&)
