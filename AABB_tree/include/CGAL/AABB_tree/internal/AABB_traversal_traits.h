@@ -207,7 +207,7 @@ public:
 
   void intersection(const Primitive& query, const Primitive& primitive)
   {
-    if( query.id()<primitive.id() && m_traits.do_intersect_object()(internal::Primitive_helper<AABBTraits>::get_datum(query, m_traits), primitive) )
+    if( query.id()!=primitive.id() && m_traits.do_intersect_object()(internal::Primitive_helper<AABBTraits>::get_datum(query, m_traits), primitive) )
     {
       *m_out_it++ = primitive.id();
     }

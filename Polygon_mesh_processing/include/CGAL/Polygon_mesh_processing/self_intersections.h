@@ -365,11 +365,6 @@ bool do_faces_intersect(typename Triangle_mesh_and_triangle_soup_wrapper<TM, GT,
   using Segment  = typename GT::Segment_3;
   using Triangle = typename GT::Triangle_3;
 
-
-  std::array<vertex_descriptor, 3> hv, gv;
-  Wrapper::get_face_vertices(fh, hv, tmesh);
-  Wrapper::get_face_vertices(fg, gv, tmesh);
-
   // check for shared edge
   std::array<vertex_descriptor, 4> verts;
   if (Wrapper::faces_have_a_shared_edge(fh, fg, verts, tmesh))
@@ -377,44 +372,30 @@ bool do_faces_intersect(typename Triangle_mesh_and_triangle_soup_wrapper<TM, GT,
     if (Wrapper::allow_identical_face() && verts[2]==verts[3]) return false; // only for a soup of triangles
 
     // there is an intersection if the four points are coplanar and the triangles overlap
-    if(CGAL::coplanar(get(vpmap, verts[0]),
-                      get(vpmap, verts[1]),
-                      get(vpmap, verts[2]),
-                      get(vpmap, verts[3])) &&
-       CGAL::coplanar_orientation(get(vpmap, verts[0]),
-                                  get(vpmap, verts[1]),
-                                  get(vpmap, verts[2]),
-                                  get(vpmap, verts[3]))
-         == CGAL::POSITIVE)
-    {
-      return true;
-    }
-    else
-    {
-      // there is a shared edge but no intersection
-      return false;
-    }
+    return CGAL::coplanar(get(vpmap, verts[0]),
+                          get(vpmap, verts[1]),
+                          get(vpmap, verts[2]),
+                          get(vpmap, verts[3])) &&
+          (CGAL::coplanar_orientation(get(vpmap, verts[0]),
+                                      get(vpmap, verts[1]),
+                                      get(vpmap, verts[2]),
+                                      get(vpmap, verts[3])) == CGAL::POSITIVE);
   }
 
-  // check for shared vertex --> maybe intersection, maybe not
+  std::array<vertex_descriptor, 3> hv, gv;
+  Wrapper::get_face_vertices(fh, hv, tmesh);
+  Wrapper::get_face_vertices(fg, gv, tmesh);
+
   int i(0), j(0);
-  bool shared = false;
-  for(; i<3 && (! shared); ++i)
-  {
-    for(j=0; j<3 && (! shared); ++j)
-    {
-      if(hv[i] == gv[j])
-      {
-        shared = true;
-        break;
-      }
-    }
+  auto faces_have_a_shared_vertex=[&](){
+    for(; i<3; ++i)
+      for(j=0; j<3; ++j)
+        if(hv[i] == gv[j])
+          return true;
+    return false;
+  };
 
-    if(shared)
-      break;
-  }
-
-  if(shared)
+  if(faces_have_a_shared_vertex())
   {
     // found shared vertex:
     CGAL_assertion(hv[i] == gv[j]);
@@ -426,13 +407,12 @@ bool do_faces_intersect(typename Triangle_mesh_and_triangle_soup_wrapper<TM, GT,
     const Segment s1 = construct_segment(get(vpmap, hv[(i+1)%3]), get(vpmap, hv[(i+2)%3]));
     const Segment s2 = construct_segment(get(vpmap, gv[(j+1)%3]), get(vpmap, gv[(j+2)%3]));
 
-    if(do_intersect(t1, s2))
-      return true;
-    else if(do_intersect(t2, s1))
-      return true;
-
-    return false;
+    return do_intersect(t1, s2) || do_intersect(t2, s1);
   }
+
+  // The last step of the AABB tree traversal do not check the bbox
+  if(!do_overlap(get(vpmap, hv[0]).bbox()+get(vpmap, hv[1]).bbox()+get(vpmap, hv[2]).bbox(),
+                 get(vpmap, gv[0]).bbox()+get(vpmap, gv[1]).bbox()+get(vpmap, gv[2]).bbox())) return false;
 
   // check for geometric intersection
   const Triangle th = construct_triangle(get(vpmap, hv[0]), get(vpmap, hv[1]), get(vpmap, hv[2]));
@@ -462,8 +442,7 @@ public:
   constexpr bool go_further() const { return true; }
   void intersection(const Primitive& query, const Primitive& primitive)
   {
-    if(query.id() < primitive.id() &&
-       do_faces_intersect<GT>(query.id(), primitive.id(), m_tm, m_vpm,
+    if(do_faces_intersect<GT>(query.id(), primitive.id(), m_tm, m_vpm,
                               m_gt.construct_segment_3_object(),
                               m_gt.construct_triangle_3_object(),
                               m_gt.do_intersect_3_object()))
@@ -474,7 +453,7 @@ public:
 
   bool do_intersect(const Primitive& query, const Node& node) const
   {
-    return m_traits.do_intersect_object()(CGAL::internal::Primitive_helper<AABBTraits>::get_datum(query, m_traits), node.bbox());
+    return m_traits.do_intersect_object()(CGAL::internal::Primitive_helper<AABBTraits>::get_datum(query, m_traits).bbox(), node.bbox());
   }
 
 private:
@@ -506,6 +485,17 @@ public:
   template<class Node_A, class Node_B>
   bool prefer_A_for_next_step(const Node_A&, const Node_B&, const std::size_t&, const std::size_t&) const {
     return false;
+  }
+
+  void intersection(const Primitive& primitive1, const Primitive& primitive2)
+  {
+    if(do_faces_intersect<GT>(primitive1.id(), primitive2.id(), m_tm, m_vpm,
+                              m_gt.construct_segment_3_object(),
+                              m_gt.construct_triangle_3_object(),
+                              m_gt.do_intersect_3_object()))
+    {
+      *out++ = std::make_pair(primitive1.id(), primitive2.id());
+    }
   }
 
   void intersection(const Primitive& primitive1, const Node& node2, std::size_t nb_primitives_2)
@@ -595,7 +585,7 @@ self_intersections_impl(const FaceRange& face_range,
   {
     Listing_intersecting_faces_two_trees_traits<AABB_traits, GT, decltype(out), TM, VPM>
       traversal_traits(tree.traits(), gt, out, tmesh, vpmap);
-    CGAL::internal::AABB_tree::two_trees_traversal<ConcurrencyTag>(tree, tree, traversal_traits);
+    CGAL::internal::AABB_tree::one_tree_traversal<ConcurrencyTag>(tree, traversal_traits);
   };
 
   if(std::is_convertible<ConcurrencyTag, Parallel_tag>::value)
@@ -616,7 +606,6 @@ self_intersections_impl(const FaceRange& face_range,
         std::atomic<unsigned int> atomic_counter(counter);
         Throw_iterator throwing_count(atomic_counter, maximum_number, std::back_inserter(face_pairs));
         Throw_at_count_reached_output_iterator count_filter(throwing_count);
-        // Filtered_intersecting_faces_filter limited_callback(tmesh, vpmap, gt, count_filter);
         all_pairs_of_intersecting_faces(tree, count_filter);
       }
       catch(const CGAL::internal::Throw_at_output_exception&)

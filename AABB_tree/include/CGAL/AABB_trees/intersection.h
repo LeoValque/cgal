@@ -207,7 +207,7 @@ namespace AABB_trees {
                                             OutputIterator out)
   {
     CGAL::internal::AABB_tree::Listing_self_intersecting_primitives_traits traversal_traits(tree.traits(), out);
-    CGAL::internal::AABB_tree::two_trees_traversal<Concurrency_tag>(tree, tree, traversal_traits);
+    CGAL::internal::AABB_tree::one_tree_traversal<Concurrency_tag>(tree, traversal_traits);
   }
 
 }} // end namespace CGAL::AABB_trees

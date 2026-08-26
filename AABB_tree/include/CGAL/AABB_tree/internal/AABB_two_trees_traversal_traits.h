@@ -180,6 +180,14 @@ public:
     return node_a.bbox().squared_diagonal_length() > node_b.bbox().squared_diagonal_length();
   }
 
+  void intersection(const Primitive& primitive1, const Primitive& primitive2)
+  {
+    using Wrap_iterator = Wrap_output_iterator<true, typename Primitive::Id, OutputIterator>;
+    Wrap_iterator wrap_out(primitive1.id(), out);
+    Listing_distinct_primitive_traits<AABBTraits, Wrap_iterator> traits(wrap_out, m_traits);
+    traits.intersection(primitive1, primitive2);
+  }
+
   void intersection(const Primitive& primitive1, const Node& node2, std::size_t nb_primitives_2)
   {
     using Wrap_iterator = Wrap_output_iterator<true, typename Primitive::Id, OutputIterator>;
