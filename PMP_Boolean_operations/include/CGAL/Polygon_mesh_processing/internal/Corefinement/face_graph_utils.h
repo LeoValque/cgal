@@ -275,7 +275,7 @@ struct AABB_tree_build_helper
                     const CGAL::Bbox_3& bbox) const
     {
       PrimitiveIterator middle = first + (beyond - first)/2;
-      const int crd=largest_span_index(bbox);
+      const int crd=bbox.largest_span_index();
       std::nth_element(first, middle, beyond, [this, crd](const Primitive& p1, const Primitive& p2){ return get(rpm, p1.id())[crd] < get(rpm, p2.id())[crd];});
     }
     const RPM &rpm;
@@ -298,8 +298,8 @@ struct AABB_tree_build_helper
     BPM bpm;
   };
 
-  template<class Concurrency_tag=Sequential_tag, class VertexPointMap>
-  void build(Tree& tree, const TriangleMesh& tm, VertexPointMap& vpm){
+  template<class ConcurrencyTag=Sequential_tag, class FaceRange, class VertexPointMap>
+  void build(const FaceRange &face_range, Tree& tree, const TriangleMesh& tm, VertexPointMap& vpm){
     using Face_bbox_tag = typename CGAL::dynamic_face_property_t<Bbox_3>;
     using Face_ref_point_tag = typename CGAL::dynamic_face_property_t<Epick::Point_3>;
     using Bbox_map = typename boost::property_map<TriangleMesh, Face_bbox_tag>::const_type;
@@ -312,25 +312,35 @@ struct AABB_tree_build_helper
     Ref_point_map rp_map = get(Face_ref_point_tag(), tm);
 
 #ifdef CGAL_LINKED_WITH_TBB
-    if constexpr(std::is_same_v<Concurrency_tag, Parallel_tag>)
+    if constexpr(std::is_same_v<ConcurrencyTag, Parallel_tag>)
     {
       tbb::parallel_for(std::size_t(0), faces(tm).size(), [&](std::size_t i){
         face_descriptor f(i);
         put(bb_map, f, face_bbox(f, tm));
         put(rp_map, f, to_input(get(vpm, target(halfedge(f, tm), tm))) );
       });
+      std::cout << "parallel_execution" << std::endl;
     }
     else
 #endif
     {
-      for(face_descriptor f : faces(tm)){
+       std::cout << "sequential_execution" << std::endl;
+      for(face_descriptor f : face_range){
         put(bb_map, f, face_bbox(f, tm));
         put(rp_map, f, to_input(get(vpm, target(halfedge(f, tm), tm))) );
       }
     }
+
+    tree.insert(face_range.begin(), face_range.end(), tm, vpm);
+
     Compute_bbox<Bbox_map> compute_bbox(bb_map);
     Split_primitives<Ref_point_map> split_primitives(rp_map);
-    tree.template custom_build<Concurrency_tag>(compute_bbox, split_primitives);
+    tree.template custom_build<ConcurrencyTag>(compute_bbox, split_primitives);
+  }
+
+  template<class ConcurrencyTag=Sequential_tag, class VertexPointMap>
+  void build(Tree& tree, const TriangleMesh& tm, VertexPointMap& vpm){
+    build<ConcurrencyTag>(faces(tm), tree, tm, vpm);
   }
 };
 
