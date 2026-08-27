@@ -559,8 +559,6 @@ self_intersections_impl(const FaceRange& face_range,
   using GT = typename GetGeomTraits<TM, NamedParameters>::type;
   GT gt = choose_parameter<GT>(get_parameter(np, internal_np::geom_traits));
 
-  CGAL_precondition(Wrapper::is_pure_triangle(tmesh));
-
   using VPM_helper = GetVertexPointMap<TM, NamedParameters>;
   using VPM = typename VPM_helper::const_type;
   VPM vpmap = VPM_helper::get_const_map(np, tmesh);
@@ -579,6 +577,8 @@ self_intersections_impl(const FaceRange& face_range,
 
   using AABB_tree = typename Wrapper::Tree;
   using AABB_traits = typename AABB_tree::AABB_traits;
+
+  CGAL_precondition(Wrapper::is_pure_triangle(tmesh));
 
   // This loop is very cheap, so there is hardly anything to gain from parallelizing it
   std::vector<face_descriptor> faces_not_degenerated;
