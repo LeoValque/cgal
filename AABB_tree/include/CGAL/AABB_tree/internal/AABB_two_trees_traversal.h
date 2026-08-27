@@ -34,7 +34,7 @@ void two_trees_traversal(const ::CGAL::AABB_node<AABBTraits_A>& node_A,
                         TwoTreeTraversalTraits& traversal_traits)
 {
 #if CGAL_LINKED_WITH_TBB
-  const std::size_t cutoff_parallel_call = 100000;
+  const std::size_t cutoff_parallel_call = 3000;
 #endif
   auto recursive_call = [](const auto &node_A, const auto &node_B, const std::size_t nb_primitives_A, const std::size_t nb_primitives_B, auto &traversal_traits){
     if(traversal_traits.prefer_A_for_next_step(node_A, node_B, nb_primitives_A, nb_primitives_B))
@@ -121,7 +121,7 @@ void one_tree_traversal(const ::CGAL::AABB_node<AABBTraits>& node,
                         TwoTreeTraversalTraits& traversal_traits)
 {
 #if CGAL_LINKED_WITH_TBB
-  const std::size_t cutoff_parallel_call = 100000;
+  const std::size_t cutoff_parallel_call = 3000;
 #endif
   switch(nb_primitives)
   {
@@ -211,7 +211,7 @@ void two_trees_partial_traversal(const ::CGAL::AABB_node<AABBTraits_A>& node_A,
                                 TwoTreeTraversalTraits& traversal_traits)
 {
 #if CGAL_LINKED_WITH_TBB
-  const std::size_t cutoff_parallel_call = 100000;
+  const std::size_t cutoff_parallel_call = 3000;
 #endif
   auto recursive_call = [&](const auto &node_A, const auto &node_B, const std::size_t nb_primitives_A, const std::size_t nb_primitives_B, auto &traversal_traits){
     if(traversal_traits.prefer_A_for_next_step(node_A, node_B, nb_primitives_A, nb_primitives_B))
