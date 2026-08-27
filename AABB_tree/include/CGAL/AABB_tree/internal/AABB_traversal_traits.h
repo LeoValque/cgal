@@ -184,6 +184,62 @@ private:
 };
 
 /**
+ * It is more efficient to apply the inverse transformation to the query and then use the original traits,
+ * but except if the constructions are exact, the result may differ from applying the original transformation to the tree.
+ * @class Listing_primitive_traits_with_transformation
+ */
+template<typename AABBTraits, typename Query, typename OutputIterator, typename AffTransformation, typename SUPPORTS_ROTATION = CGAL::Tag_true>
+class Listing_primitive_traits_with_transformation
+{
+  typedef typename AABBTraits::FT FT;
+  typedef typename AABBTraits::Point Point;
+  typedef typename AABBTraits::Primitive Primitive;
+  typedef typename AABBTraits::Bounding_box Bounding_box;
+  typedef typename AABBTraits::Primitive::Id Primitive_id;
+  typedef typename AABBTraits::Point_and_primitive_id Point_and_primitive_id;
+  typedef typename AABBTraits::Object_and_primitive_id Object_and_primitive_id;
+  typedef ::CGAL::AABB_node<AABBTraits> Node;
+
+public:
+  Listing_primitive_traits_with_transformation(OutputIterator out_it, const AABBTraits& traits)
+    : m_out_it(out_it), m_traits(traits), m_transfo(CGAL::IDENTITY), m_has_rotation(false)
+  {}
+
+  Listing_primitive_traits_with_transformation(OutputIterator out_it, const AABBTraits& traits, const AffTransformation& transfo)
+    : m_out_it(out_it), m_traits(traits), m_transfo(transfo), m_has_rotation(transfo.has_rotation())
+  {}
+
+  constexpr bool go_further() const { return true; }
+
+  void intersection(const Query& query, const Primitive& primitive)
+  {
+    auto datum_transformed = internal::Primitive_helper<AABBTraits>::get_datum(primitive, m_traits).transform(m_transfo);
+    if( CGAL::do_intersect(query, datum_transformed) )
+    {
+      *m_out_it++ = primitive.id();
+    }
+  }
+
+  bool do_intersect(const Query& query, const Node& node) const
+  {
+    return m_traits.do_intersect_object()(query, compute_transformed_bbox(m_transfo, node.bbox(), m_has_rotation));
+  }
+
+  const AffTransformation& transformation() const { return m_transfo; }
+  void set_transformation(const AffTransformation& transfo)
+  {
+    m_transfo = transfo;
+    m_has_rotation = m_transfo.has_rotation();
+  }
+
+private:
+  OutputIterator m_out_it;
+  const AABBTraits& m_traits;
+  AffTransformation m_transfo;
+  bool m_has_rotation;
+};
+
+/**
  * @class Listing_distinct_primitive_traits
  * used by `all_pairs_of_intersecting_primitives()` to avoid reporting `(i, i)` and twice `(i, j)`.
  */
@@ -312,10 +368,10 @@ private:
 
 /**
  * It is more efficient to apply the inverse transformation to the query and then use the original traits,
-* but computing an inverse is less numerically stable than applying the transformation to the primitives.
+ * but except if the constructions are exact, the result may differ from applying the original transformation to the tree.
  * @class Do_intersect_traits_with_transformation
  */
-template<typename AABBTraits, typename Query, typename SUPPORTS_ROTATION = CGAL::Tag_true>
+template<typename AABBTraits, typename Query, typename AffTransformation, typename SUPPORTS_ROTATION = CGAL::Tag_true>
 class Do_intersect_traits_with_transformation
 {
   typedef typename AABBTraits::FT FT;
@@ -327,14 +383,12 @@ class Do_intersect_traits_with_transformation
   typedef typename AABBTraits::Object_and_primitive_id Object_and_primitive_id;
   typedef ::CGAL::AABB_node<AABBTraits> Node;
 
-  typedef Aff_transformation_3<typename AABBTraits::Geom_traits> Transformation_3;
-
 public:
   Do_intersect_traits_with_transformation(const AABBTraits& traits)
     : m_is_found(false), m_traits(traits), m_transfo(CGAL::IDENTITY), m_has_rotation(false)
   {}
 
-  Do_intersect_traits_with_transformation(const AABBTraits& traits, const Transformation_3& transfo)
+  Do_intersect_traits_with_transformation(const AABBTraits& traits, const AffTransformation& transfo)
     : m_is_found(false), m_traits(traits), m_transfo(transfo), m_has_rotation(transfo.has_rotation())
   {}
 
@@ -354,8 +408,8 @@ public:
 
   bool is_intersection_found() const { return m_is_found; }
 
-  const Transformation_3& transformation() const { return m_transfo; }
-  void set_transformation(const Transformation_3& transfo)
+  const AffTransformation& transformation() const { return m_transfo; }
+  void set_transformation(const AffTransformation& transfo)
   {
     m_transfo = transfo;
     m_has_rotation = m_transfo.has_rotation();
@@ -364,7 +418,7 @@ public:
 private:
   bool m_is_found;
   const AABBTraits& m_traits;
-  Transformation_3 m_transfo;
+  AffTransformation m_transfo;
   bool m_has_rotation;
 };
 

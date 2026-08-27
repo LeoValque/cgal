@@ -52,7 +52,7 @@ namespace AABB_trees {
   ///   \cgalParamNBegin{use_inverse_transformation}
   ///     \cgalParamDescription{If true, the inverse of the transformations are used to accelerate the queries.
   ///     \cgalParamType{`CGAL::Tag_true` or `CGAL::Tag_false`}
-  ///     \cgalParamDefault{`CGAL::Tag_true`}
+  ///     \cgalParamDefault{`CGAL::Tag_false`}
   ///     \cgalParamExtra{The result may be less accurate than using the original transformations.}
   ///     \cgalParamExtra{`np1` only}
   ///   \cgalParamNEnd
@@ -87,7 +87,7 @@ namespace AABB_trees {
     using Inverse_tag = typename internal_np::Lookup_named_param_def <
                                           internal_np::use_inverse_transformation_t,
                                           NamedParameters1,
-                                          Tag_true
+                                          Tag_false
                                         > ::type;
 
     if constexpr(is_default_parameter<NamedParameters1, internal_np::transformation_t>::value &&
@@ -117,7 +117,7 @@ namespace AABB_trees {
 
   /// \ingroup PkgAABBTreeRef
   ///
-  /// \brief computes all pairs of intersecting primitive from two AABB trees.
+  /// \brief computes all pairs of intersecting primitives from two AABB trees.
   ///
   /// Both trees are traversed and all pairs of primitives that intersect are collected.
   /// Each output element is a pair `(id1, id2)` where:
@@ -140,7 +140,7 @@ namespace AABB_trees {
   ///   \cgalParamNBegin{transformation}
   ///     \cgalParamDescription{An affine transformation apply to `tree1` (`tree2`)}
   ///     \cgalParamType{`CGAL::Aff_transformation_3<Kernel>` where `Kernel` is the kernel associated with `AABBTree1::AABB_traits::Point` (`AABBTree2::AABB_traits::Point`)}
-  ///     \cgalParamDefault{An identity transformation}
+  ///     \cgalParamDefault{The identity transformation}
   ///   \cgalParamNEnd
   /// \cgalNamedParamsEnd
   ///
@@ -196,7 +196,8 @@ namespace AABB_trees {
   ///
   /// \brief computes all pairs of primitives from a single AABB tree that are intersecting.
   ///
-  /// \note Whether two objects that share a common subfeature (e.g., two triangles sharing an edge) are considered to intersect depends on the primitive type used.
+  /// \note Two primitives do intersect if their datum do intersect according to the traits of the tree. Thus, with all documented traits in CGAL, two triangles sharing
+  /// a vertex are considered to intersect, and similarly for other primitives types and types of intersection.
   ///
   /// Intersections of a primitive with itself are not reported, and each intersecting
   /// pair of distinct primitives is reported only once.
