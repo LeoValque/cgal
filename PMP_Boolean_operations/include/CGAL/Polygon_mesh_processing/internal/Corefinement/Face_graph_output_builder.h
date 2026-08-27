@@ -17,6 +17,7 @@
 
 
 #include <CGAL/Polygon_mesh_processing/internal/Corefinement/face_graph_utils.h>
+#include <CGAL/Polygon_mesh_processing/internal/soup_and_face_graph_tree_helper.h>
 
 #include <CGAL/Polygon_mesh_processing/orientation.h>
 #include <CGAL/Polygon_mesh_processing/connected_components.h>

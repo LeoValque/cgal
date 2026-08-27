@@ -50,7 +50,7 @@
 #include <typeinfo>
 #include <vector>
 
-#include <CGAL/Polygon_mesh_processing/internal/Corefinement/face_graph_utils.h>
+#include <CGAL/Polygon_mesh_processing/internal/soup_and_face_graph_tree_helper.h>
 
 #include <CGAL/AABB_tree.h>
 #include <CGAL/AABB_traits_3.h>
@@ -94,7 +94,7 @@ struct Triangle_mesh_and_triangle_soup_wrapper
   using vertex_descriptor   = typename boost::graph_traits<TM>::vertex_descriptor;
   using halfedge_descriptor = typename boost::graph_traits<TM>::halfedge_descriptor; // private
 
-  using Tree_helper = Corefinement::AABB_tree_build_helper<TM, GT>;
+  using Tree_helper = AABB_tree_build_helper<TM, GT>;
   using Tree        = typename Tree_helper::Tree;
 
   template<class ConcurrencyTag = Sequential_tag, class FaceRange>
