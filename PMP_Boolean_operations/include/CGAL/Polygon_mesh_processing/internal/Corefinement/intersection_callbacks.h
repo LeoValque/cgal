@@ -118,8 +118,10 @@ public:
     Point c = get(vpmap_tmf, target(next(fh, tm_faces), tm_faces));
 
     /// SHOULD_USE_TRAITS_TAG
-    const Orientation abcp = orientation(a,b,c, get(vpmap_tme, target(eh, tm_edges)));
-    const Orientation abcq = orientation(a,b,c, get(vpmap_tme, source(eh, tm_edges)));
+    using K = typename Kernel_traits<std::remove_reference_t<Point>>::Kernel;
+    auto orientation = K().orientation_3_object();
+    const auto [abcp,abcq] = orientation(a,b,c, get(vpmap_tme, target(eh, tm_edges)), get(vpmap_tme, source(eh, tm_edges)));
+
     if (abcp==abcq){
       if (abcp!=COPLANAR){
         return; //no intersection
