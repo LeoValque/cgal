@@ -894,6 +894,15 @@ void import_polyline(
   output_shared_edges.push_back(add_edge(output));
   halfedge_descriptor h_out = halfedge(output_shared_edges.back(),output);
 
+  auto set_output_vertex = [&](vertex_descriptor v, halfedge_descriptor h_out){
+    user_visitor.before_vertex_copy(v, pm1, output);
+    vertex_descriptor new_v = add_vertex(output);
+    set_halfedge(new_v, opposite(h_out, output),output);
+    put(vpm_out, new_v, get(vpm1, v));
+    user_visitor.after_vertex_copy(v, pm1, new_v, output);
+    return new_v;
+  };
+
   //make sure the first vertex does not already exist
   vertex_descriptor src = GT::null_vertex();
   std::pair< typename VertexMap::iterator, bool > insert_res=
@@ -901,12 +910,9 @@ void import_polyline(
 
   if( insert_res.second )
   {
-    user_visitor.before_vertex_copy(source(h1,pm1), pm1, output);
-    src = add_vertex(output);
-    set_halfedge(src, opposite(h_out,output),output);
-    put(vpm_out, src, get(vpm1, source(h1,pm1)));
-    user_visitor.after_vertex_copy(source(h1,pm1), pm1, src, output);
+    src = set_output_vertex(source(h1, pm1), h_out);
     insert_res.first->second = src;
+    pm2_to_output_vertices.insert(std::make_pair(source(h2, pm2), src));
   }
   else
     src = insert_res.first->second;
@@ -915,26 +921,20 @@ void import_polyline(
   vertex_descriptor tgt=GT::null_vertex();
   if ( nb_segments==1 )
   {
-    insert_res =
-      pm1_to_output_vertices.insert( std::make_pair( target(h1,pm1), tgt ) );
+    insert_res = pm1_to_output_vertices.insert( std::make_pair( target(h1,pm1), tgt ) );
     if( insert_res.second )
     {
-      user_visitor.before_vertex_copy(target(h1,pm1), pm1, output);
-      tgt = add_vertex(output);
-      set_halfedge(tgt, h_out, output);
-      put(vpm_out, tgt, get(vpm1, target(h1,pm1)));
-      user_visitor.after_vertex_copy(target(h1,pm1), pm1, tgt, output);
+      tgt = set_output_vertex(target(h1, pm1), h_out);
       insert_res.first->second = tgt;
+      pm2_to_output_vertices.insert( std::make_pair( target(h2,pm2), tgt ) );
     }
     else
       tgt = insert_res.first->second;
   }
-  else{
-    user_visitor.before_vertex_copy(target(h1,pm1), pm1, output);
-    tgt = add_vertex(output);
-    set_halfedge(tgt, h_out, output);
-    put(vpm_out, tgt, get(vpm1, target(h1,pm1)));
-    user_visitor.after_vertex_copy(target(h1,pm1), pm1, tgt, output);
+  else
+  {
+    tgt = set_output_vertex(target(h1, pm1), h_out);
+    pm2_to_output_vertices.insert( std::make_pair( target(h2,pm2), tgt ) );
   }
 
   //update source and target vertex of the edge created
@@ -946,10 +946,8 @@ void import_polyline(
   halfedge_descriptor prev2=h2;
 
   //set the correspondence
-  pm1_to_output_edges.insert(
-    std::make_pair(edge(prev1, pm1), edge(prev_out, output)) );
-  pm2_to_output_edges.insert(
-    std::make_pair(edge(prev2, pm2), edge(prev_out, output)) );
+  pm1_to_output_edges.insert( std::make_pair(edge(prev1, pm1), edge(prev_out, output)) );
+  pm2_to_output_edges.insert( std::make_pair(edge(prev2, pm2), edge(prev_out, output)) );
 
   user_visitor.intersection_edge_copy(prev1, pm1, prev2, pm2, h_out, output);
 
@@ -968,23 +966,14 @@ void import_polyline(
     //if this is the final segment, only create a target vertex if it does not exist
     if (i+1!=nb_segments)
     {
-      user_visitor.before_vertex_copy(target(h1,pm1), pm1, output);
-      tgt=add_vertex(output);
-      set_halfedge(tgt, h_out, output);
-      put(vpm_out, tgt, get(vpm1, target(h1,pm1)));
-      user_visitor.after_vertex_copy(target(h1,pm1), pm1, tgt, output);
+      tgt = set_output_vertex(target(h1, pm1), h_out);
     }
     else{
       std::pair< typename VertexMap::iterator, bool > insert_res =
         pm1_to_output_vertices.insert(std::make_pair(target(h1,pm1), tgt));
       if (insert_res.second)
       {
-        user_visitor.before_vertex_copy(target(h1,pm1), pm1, output);
-        tgt=add_vertex(output);
-        set_halfedge(tgt, h_out, output);
-        put(vpm_out, tgt, get(vpm1, target(h1,pm1)));
-        insert_res.first->second = tgt;
-        user_visitor.after_vertex_copy(target(h1,pm1), pm1, tgt, output);
+        tgt = set_output_vertex(target(h1, pm1), h_out);
       }
       else
         tgt = insert_res.first->second;
@@ -998,10 +987,8 @@ void import_polyline(
     prev2 = h2;
     src = tgt;
 
-    pm1_to_output_edges.insert(
-      std::make_pair(edge(prev1, pm1), edge(prev_out, output)) );
-    pm2_to_output_edges.insert(
-      std::make_pair(edge(prev2, pm2), edge(prev_out, output)) );
+    pm1_to_output_edges.insert( std::make_pair(edge(prev1, pm1), edge(prev_out, output)) );
+    pm2_to_output_edges.insert( std::make_pair(edge(prev2, pm2), edge(prev_out, output)) );
   }
 }
 
