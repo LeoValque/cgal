@@ -467,7 +467,8 @@ template <class TriangleMesh,
           class Kernel_ = Default,
           class EdgeMarkMapBind_  = Default,
           class EdgeMarkMapTuple_ = Default,
-          class UserVisitor_      = Default>
+          class UserVisitor_      = Default,
+          class ConcurrencyTag    = Sequential_tag>
 class Face_graph_output_builder
 {
 //Default typedefs
@@ -1078,12 +1079,13 @@ public:
 
     // (1) Assign a patch id to each facet indicating in which connected
     // component limited by intersection edges of the surface they are.
+    std::vector<std::size_t> tm1_patch_ids( num_faces(tm1),NID );
+    std::vector<std::size_t> tm2_patch_ids( num_faces(tm2),NID );
     std::vector<std::size_t> tm1_patch_sizes, tm2_patch_sizes;
     std::size_t nb_patches_tm1, nb_patches_tm2;
     auto connected_components_1=[&]()
     {
       // ... for tm1
-      std::vector<std::size_t> tm1_patch_ids( num_faces(tm1),NID );
       Border_edge_map<TriangleMesh> is_marked_1(intersection_edges1, tm1);
       nb_patches_tm1 = connected_components(tm1,
                                             make_compose_property_map(fids1,make_property_map(&tm1_patch_ids[0])),
@@ -1099,7 +1101,6 @@ public:
     auto connected_components_2=[&]()
     {
       // ... for tm2
-      std::vector<std::size_t> tm2_patch_ids( num_faces(tm2),NID );
       Border_edge_map<TriangleMesh> is_marked_2(intersection_edges2, tm2);
       nb_patches_tm2 = connected_components(tm2,
                                             make_compose_property_map(fids2,make_property_map(&tm2_patch_ids[0])),
@@ -1111,6 +1112,7 @@ public:
         if(i!=NID)
           ++tm2_patch_sizes[i];
     };
+
 #ifdef CGAL_LINKED_WITH_TBB
     if constexpr(std::is_same_v<ConcurrencyTag, Parallel_tag>)
     {

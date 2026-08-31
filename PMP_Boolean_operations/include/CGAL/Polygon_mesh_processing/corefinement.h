@@ -480,7 +480,8 @@ corefine_and_compute_boolean_operations(
                                                   Default,
                                                   Ecm_in,
                                                   Edge_mark_map_tuple,
-                                                  User_visitor> Ob;
+                                                  User_visitor,
+                                                  ConcurrencyTag> Ob;
 
   typedef Corefinement::Surface_intersection_visitor_for_corefinement<
             TriangleMesh, VPM1, VPM2, Ob, Ecm_in, User_visitor> Algo_visitor;
