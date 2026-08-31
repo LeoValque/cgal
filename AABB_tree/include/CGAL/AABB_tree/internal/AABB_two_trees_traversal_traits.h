@@ -74,7 +74,7 @@ public:
     using Wrap_iterator = Wrap_output_iterator<true, typename Primitive1::Id, OutputIterator>;
     Wrap_iterator wrap_out(primitive1.id(), out);
     Listing_primitive_traits<AABBTraits2, typename AABBTraits1::Primitive::Datum, Wrap_iterator> traits(wrap_out, m_traits2);
-    traits.intersection(primitive1, primitive2);
+    traits.intersection(internal::Primitive_helper<AABBTraits1>::get_datum(primitive1, m_traits1), primitive2);
   }
 
   void intersection(const Primitive1& primitive1, const Node2& node2, std::size_t nb_primitives_2)

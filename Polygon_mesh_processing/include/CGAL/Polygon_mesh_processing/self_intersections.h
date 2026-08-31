@@ -61,32 +61,6 @@ namespace CGAL {
 namespace Polygon_mesh_processing {
 namespace internal {
 
-#ifndef DOXYGEN_RUNNING
-template <class PointRange, class VPM>
-struct Property_map_for_soup
-{
-  using VPM_base   = VPM;
-  using key_type   = std::size_t;
-  using value_type = typename boost::property_traits<VPM>::value_type;
-  using category   = boost::readable_property_map_tag;
-  using reference  = typename boost::property_traits<VPM>::reference;
-
-  const PointRange& points;
-  VPM vpm;
-
-  Property_map_for_soup(const PointRange& points, VPM vpm)
-    : points(points)
-    , vpm(vpm)
-  {}
-
-  inline friend
-  reference get(const Property_map_for_soup<PointRange, VPM>& map, key_type k)
-  {
-    return get(map.vpm, map.points[k]);
-  }
-};
-#endif
-
 template <class TM, class GT, class VPM>
 struct Triangle_mesh_and_triangle_soup_wrapper
 {
@@ -94,7 +68,7 @@ struct Triangle_mesh_and_triangle_soup_wrapper
   using vertex_descriptor   = typename boost::graph_traits<TM>::vertex_descriptor;
   using halfedge_descriptor = typename boost::graph_traits<TM>::halfedge_descriptor; // private
 
-  using Tree_helper = AABB_tree_build_helper<TM, GT>;
+  using Tree_helper = AABB_tree_graph_helper<TM, GT>;
   using Tree        = typename Tree_helper::Tree;
 
   template<class ConcurrencyTag = Sequential_tag, class FaceRange>
@@ -158,90 +132,17 @@ struct Triangle_mesh_and_triangle_soup_wrapper< std::pair<const PointRange&, con
 
   using Soup = std::pair<const PointRange&, const TriangleRange& >;
 
-  using Primitive = AABB_indexed_triangle_primitive_3<GT, PointRange, TriangleRange, Tag_false, typename VPM::VPM_base>;
-  using Tree = AABB_tree<AABB_traits_3<GT, Primitive>>;
-
-  template <class RPM>
-  struct Split_primitives
-  {
-    Split_primitives(const RPM &rpm): rpm(rpm){}
-
-    template<typename PrimitiveIterator>
-    void operator()(PrimitiveIterator first,
-                    PrimitiveIterator beyond,
-                    const CGAL::Bbox_3& bbox) const
-      {
-        PrimitiveIterator middle = first + (beyond - first)/2;
-        const int crd = bbox.largest_span_index();
-        std::nth_element(first, middle, beyond, [this, crd](const auto& p1, const auto& p2){ return get(rpm, p1.id())[crd] < get(rpm, p2.id())[crd];});
-      }
-    const RPM &rpm;
-  };
-
-  // For exact side_of_triangle_mesh
-  template <class BPM>
-  struct Compute_bbox {
-    Compute_bbox(const BPM& bpm): bpm(bpm){}
-
-    template<typename ConstPrimitiveIterator>
-    CGAL::Bbox_3 operator()(ConstPrimitiveIterator first,
-                            ConstPrimitiveIterator beyond) const
-    {
-      CGAL::Bbox_3 bbox = get(bpm, first->id());
-      for(++first; first != beyond; ++first)
-        bbox += get(bpm, first->id());
-      return bbox;
-    }
-    BPM bpm;
-  };
+  using Tree_helper = AABB_tree_soup_helper<PointRange, TriangleRange, GT, VPM>;
+  using Tree        = typename Tree_helper::Tree;
 
   template<class ConcurrencyTag=Sequential_tag, class FaceRange>
-  static void build_tree(const FaceRange &face_range, Tree& tree, const Soup& soup, VPM vpm){
-    using PM_kernel     = typename Kernel_traits<typename boost::property_traits<VPM>::value_type>::Kernel;
-    using Bbox_map      = Pointer_property_map<Bbox_3>::type;
-    using Ref_point_map = Pointer_property_map<Epick::Point_3>::type;
-
-    CGAL::Cartesian_converter<PM_kernel, Epick> to_input;
-
-    const auto& points = soup.first;
-    const auto& triangles = soup.second;
-
-    tree.insert(face_range.begin(), face_range.end(), points, triangles, vpm.vpm);
-
-    std::vector<Bbox_3> bb_vector(triangles.size(), Bbox_3());
-    std::vector<Epick::Point_3> rp_vector(triangles.size(), Epick::Point_3());
-    Bbox_map bb_map = make_property_map(bb_vector);
-    Ref_point_map rp_map = make_property_map(rp_vector);
-
-#ifdef CGAL_LINKED_WITH_TBB
-    if constexpr(std::is_same_v<ConcurrencyTag, Parallel_tag>)
-    {
-      tbb::parallel_for(std::size_t(0), face_range.size(), [&](std::size_t i){
-        i = face_range[i];
-        put(bb_map, i, get(vpm, triangles[i][0]).bbox() +
-                       get(vpm, triangles[i][1]).bbox() +
-                       get(vpm, triangles[i][2]).bbox());
-        put(rp_map, i, to_input(get(vpm, triangles[i][0])) );
-      });
-    }
-    else
-#endif
-    {
-      for(std::size_t i: face_range){
-        put(bb_map, i, get(vpm, triangles[i][0]).bbox() +
-                       get(vpm, triangles[i][1]).bbox() +
-                       get(vpm, triangles[i][2]).bbox());
-        put(rp_map, i, to_input(get(vpm, triangles[i][0])) );
-      }
-    }
-    Compute_bbox<Bbox_map> compute_bbox(bb_map);
-    Split_primitives<Ref_point_map> split_primitives(rp_map);
-    tree.template custom_build<ConcurrencyTag>(compute_bbox, split_primitives);
+  static void build_tree(const FaceRange &faces, Tree& tree, const Soup& soup, VPM vpm){
+    Tree_helper().template build<ConcurrencyTag>(faces, tree, soup.first, soup.second, vpm);
   }
 
   template<class ConcurrencyTag=Sequential_tag>
   static void build_tree(Tree& tree, const Soup& soup, VPM vpm){
-    build_tree<ConcurrencyTag>(soup.second, tree, soup, vpm);
+    Tree_helper().template build<ConcurrencyTag>( tree, soup.first, soup.second, vpm);
   }
 
   static void get_face_vertices(face_descriptor fd, std::array<vertex_descriptor,3>& vh, const Soup& soup)
@@ -614,22 +515,21 @@ self_intersections_impl(const FaceRange& face_range,
   // This is obviously not optimal if there are no or few self-intersections: it would be a greater speed-up
   // to do the same as for `self_intersections()`. However, doing like `self_intersections()` would
   // be a major slow-down over sequential code if there are a lot of self-intersections...
-    using Throwing_output_iterator = boost::function_output_iterator<CGAL::internal::Throw_at_output>;
-    Throwing_output_iterator throwing_filter;
+  using Throwing_output_iterator = boost::function_output_iterator<CGAL::internal::Throw_at_output>;
+  Throwing_output_iterator throwing_filter;
 
-    AABB_tree tree;
-    Wrapper::template build_tree<ConcurrencyTag>(faces_not_degenerated, tree, tmesh, vpmap);
+  AABB_tree tree;
+  Wrapper::template build_tree<ConcurrencyTag>(faces_not_degenerated, tree, tmesh, vpmap);
 
-#if !defined(CGAL_LINKED_WITH_TBB)
-  static_assert (!(std::is_convertible<ConcurrencyTag, Parallel_tag>::value),
-                             "Parallel_tag is enabled but TBB is unavailable.");
-#else
   const auto all_pairs_of_intersecting_faces = [&](const AABB_tree& tree, auto out){
     Listing_intersecting_faces_two_trees_traits<AABB_traits, GT, decltype(out), TM, VPM>
       traversal_traits(tree.traits(), gt, out, tmesh, vpmap);
     CGAL::internal::AABB_tree::one_tree_traversal<ConcurrencyTag>(tree, traversal_traits);
   };
-
+#if !defined(CGAL_LINKED_WITH_TBB)
+  static_assert (!(std::is_convertible<ConcurrencyTag, Parallel_tag>::value),
+                             "Parallel_tag is enabled but TBB is unavailable.");
+#else
   if(std::is_convertible<ConcurrencyTag, Parallel_tag>::value)
   {
     // Write in a concurrent vector all pairs that intersect

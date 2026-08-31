@@ -255,7 +255,7 @@ class Intersection_of_triangle_meshes
                             ISM2 is_shared_map_2)
   {
     using GT = typename GetGeomTraits<TriangleMesh, parameters::Default_named_parameters>::type;
-    using AABB_tree_helper = internal::AABB_tree_build_helper<TriangleMesh, GT>;
+    using AABB_tree_helper = internal::AABB_tree_graph_helper<TriangleMesh, GT>;
     using Tree = typename AABB_tree_helper::Tree;
     AABB_tree_helper helper;
 
@@ -398,7 +398,7 @@ class Intersection_of_triangle_meshes
                             const VPM& vpm)
   {
     using GT = typename GetGeomTraits<TriangleMesh, parameters::Default_named_parameters>::type;
-    using AABB_tree_helper = internal::AABB_tree_build_helper<TriangleMesh, GT>;
+    using AABB_tree_helper = internal::AABB_tree_graph_helper<TriangleMesh, GT>;
     using Tree = typename AABB_tree_helper::Tree;
     AABB_tree_helper helper;
 
@@ -407,7 +407,7 @@ class Intersection_of_triangle_meshes
 
     using Callback = Collect_face_bbox_per_edge_bbox_with_coplanar_handling_one_mesh<
                       TriangleMesh, VPM, Edge_to_faces, Coplanar_face_set>;
-    Callback callback(tm, tm, stm_edge_to_ltm_faces, coplanar_faces);
+    Callback callback(tm, vpm, stm_edge_to_ltm_faces, coplanar_faces);
 
   #ifdef CGAL_LINKED_WITH_TBB
     if constexpr(std::is_same_v<ConcurrencyTag, Parallel_tag>)
