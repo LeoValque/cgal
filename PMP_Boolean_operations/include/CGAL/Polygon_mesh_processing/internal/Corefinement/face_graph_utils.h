@@ -912,7 +912,6 @@ void import_polyline(
   {
     src = set_output_vertex(source(h1, pm1), h_out);
     insert_res.first->second = src;
-    pm2_to_output_vertices.insert(std::make_pair(source(h2, pm2), src));
   }
   else
     src = insert_res.first->second;
@@ -926,7 +925,6 @@ void import_polyline(
     {
       tgt = set_output_vertex(target(h1, pm1), h_out);
       insert_res.first->second = tgt;
-      pm2_to_output_vertices.insert( std::make_pair( target(h2,pm2), tgt ) );
     }
     else
       tgt = insert_res.first->second;
@@ -934,7 +932,6 @@ void import_polyline(
   else
   {
     tgt = set_output_vertex(target(h1, pm1), h_out);
-    pm2_to_output_vertices.insert( std::make_pair( target(h2,pm2), tgt ) );
   }
 
   //update source and target vertex of the edge created
