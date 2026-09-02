@@ -203,6 +203,7 @@ int main(int argc, char* argv[])
   Visitor visitor;
 
   bool valid_union = PMP::corefine_and_compute_union (mesh1,mesh2, out, CGAL::parameters::visitor(visitor).concurrency_tag(CGAL::Parallel_if_available_tag()));
+  // bool valid_union = PMP::corefine_and_compute_union (mesh1,mesh2, out, CGAL::parameters::visitor(visitor));
 
   std::cout << "Global timer = " << t.time() << " sec." << std::endl;
 

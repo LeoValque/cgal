@@ -516,6 +516,8 @@ class Face_graph_output_builder
   typedef std::unordered_map<vertex_descriptor, Node_id>   Node_id_map;
   typedef std::unordered_map<edge_descriptor,
                              edge_descriptor>                 Edge_map;
+  typedef std::unordered_map<vertex_descriptor,
+                             vertex_descriptor>               Vertex_map;
 //Data members
   TriangleMesh &tm1, &tm2;
   // property maps of input meshes
@@ -2404,6 +2406,7 @@ public:
     }
 
     Edge_map disconnected_patches_edge_to_tm2_edge;
+    Vertex_map disconnected_patches_vertex_to_tm2_vertex;
 
     /// handle the operations updating tm1 and/or tm2
     if ( inplace_operation_tm1!=NONE )
@@ -2482,6 +2485,7 @@ public:
           marks_on_input_edges.ecm2, \
           std::get<BO_type>(out_edge_mark_maps), \
           disconnected_patches_edge_to_tm2_edge, \
+          disconnected_patches_vertex_to_tm2_vertex, \
           user_visitor)
         CGAL_COREF_FUNCTION_CALL(inplace_operation_tm1)
         #undef CGAL_COREF_FUNCTION_CALL_DEF
@@ -2501,6 +2505,7 @@ public:
                                      marks_on_input_edges.ecm1, \
                                      std::get<BO_type>(out_edge_mark_maps), \
                                      disconnected_patches_edge_to_tm2_edge, \
+                                     disconnected_patches_vertex_to_tm2_vertex, \
                                      user_visitor)
         CGAL_COREF_FUNCTION_CALL(inplace_operation_tm2)
         #undef CGAL_COREF_FUNCTION_CALL_DEF
@@ -2571,6 +2576,7 @@ public:
             }
             if (!to_rm.empty())
             {
+              // Here there are an assumption that edges in to_rm are necessarly the last of shared edges
               std::reverse(to_rm.begin(), to_rm.end());
               for(Hedge_iterator it : to_rm)
               {
@@ -2579,6 +2585,7 @@ public:
                   std::swap(patches_of_tm1[i].shared_edges.back(), *it);
                 patches_of_tm1[i].shared_edges.pop_back();
               }
+
               //now update interior vertices
               std::set<vertex_descriptor> border_vertices;
               for(halfedge_descriptor h : patches_of_tm1[i].shared_edges)
@@ -2587,13 +2594,15 @@ public:
                 border_vertices.insert( source(h,tm1) );
               }
 
+              std::set<vertex_descriptor> vertices_to_add;
               for(halfedge_descriptor h : patches_of_tm1[i].interior_edges)
               {
                 if ( !border_vertices.count( target(h,tm1) ) )
-                  patches_of_tm1[i].interior_vertices.insert( target(h,tm1) );
+                  vertices_to_add.insert(target(h, tm1));
                 if ( !border_vertices.count( source(h,tm1) ) )
-                  patches_of_tm1[i].interior_vertices.insert( source(h,tm1) );
+                  vertices_to_add.insert(source(h, tm1));
               }
+              patches_of_tm1[i].interior_vertices.insert(patches_of_tm1[i].interior_vertices.end(), vertices_to_add.begin(), vertices_to_add.end() );
             }
           }
 
@@ -2618,8 +2627,14 @@ public:
             if (all_removed)
               id_p_rm.erase(id_p_rm.begin());
             // remove the vertex from the interior vertices of patches to be removed
-            for(std::size_t pid : id_p_rm)
-              patches_of_tm1[pid].interior_vertices.erase(vd);
+            for(std::size_t pid : id_p_rm){
+              auto it = std::find( patches_of_tm1[pid].interior_vertices.begin(),
+                                   patches_of_tm1[pid].interior_vertices.end(),
+                                   vd); // Linear time, expensive
+              if (it!=std::prev(patches_of_tm1[pid].interior_vertices.end()))
+                std::swap(*it, patches_of_tm1[pid].interior_vertices.back());
+              patches_of_tm1[pid].interior_vertices.pop_back();
+            }
 
             // we now need to update the next/prev relationship induced by the future removal of patches
             // that will not be updated after patch removal
