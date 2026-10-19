@@ -31,6 +31,8 @@ namespace Corefinement {
 template<class TriangleMesh,
          class VertexPointMapF, class VertexPointMapE,
          class EdgeToFaces,
+         class EdgeIndexMap,
+         class EdgeIndexRange,
          class CoplanarFaceSet,
          class Visitor>
 class Collect_face_bbox_per_edge_bbox_with_coplanar_handling {
@@ -40,6 +42,8 @@ protected:
   const VertexPointMapF& vpmap_tmf;
   const VertexPointMapE& vpmap_tme;
   EdgeToFaces& edge_to_faces;
+  const EdgeIndexMap& to_index;
+  EdgeIndexRange& intersecting_edge;
   CoplanarFaceSet& coplanar_faces;
   const Visitor& visitor;
 
@@ -56,6 +60,8 @@ public:
     const VertexPointMapF& vpmap_tmf,
     const VertexPointMapE& vpmap_tme,
     EdgeToFaces& edge_to_faces,
+    const EdgeIndexMap& to_index,
+    EdgeIndexRange& intersecting_edge,
     CoplanarFaceSet& coplanar_faces,
     const Visitor& visitor)
   : tm_faces(tm_faces)
@@ -63,6 +69,8 @@ public:
   , vpmap_tmf(vpmap_tmf)
   , vpmap_tme(vpmap_tme)
   , edge_to_faces(edge_to_faces)
+  , to_index(to_index)
+  , intersecting_edge(intersecting_edge)
   , coplanar_faces(coplanar_faces)
   , visitor(visitor)
   {}
@@ -107,7 +115,10 @@ public:
       return;
     }
     // non-coplanar case
-    edge_to_faces[edge(eh,tm_edges)].insert(face(fh, tm_faces));
+    auto& fset = edge_to_faces[get(to_index, edge(eh,tm_edges))];
+    if(fset.empty())
+      intersecting_edge.push_back(edge(eh, tm_edges));
+    fset.insert(face(fh, tm_faces));
   }
 
   bool is_face_degenerated(halfedge_descriptor fh) const
@@ -150,12 +161,16 @@ public:
 template<class TriangleMesh,
          class VertexPointMap,
          class EdgeToFaces,
+         class EdgeIndexMap,
+         class EdgeIndexRange,
          class CoplanarFaceSet>
 class Collect_face_bbox_per_edge_bbox_with_coplanar_handling_one_mesh {
 protected:
   const TriangleMesh& tm;
   const VertexPointMap& vpmap;
   EdgeToFaces& edge_to_faces;
+  const EdgeIndexMap& to_index;
+  EdgeIndexRange& intersecting_edge;
   CoplanarFaceSet& coplanar_faces;
 
   typedef boost::graph_traits<TriangleMesh> Graph_traits;
@@ -216,10 +231,14 @@ public:
     const TriangleMesh& tm,
     const VertexPointMap& vpmap,
     EdgeToFaces& edge_to_faces,
+    const EdgeIndexMap& to_index,
+    EdgeIndexRange& intersecting_edge,
     CoplanarFaceSet& coplanar_faces)
   : tm(tm)
   , vpmap(vpmap)
   , edge_to_faces(edge_to_faces)
+  , to_index(to_index)
+  , intersecting_edge(intersecting_edge)
   , coplanar_faces(coplanar_faces)
   {}
 
@@ -299,7 +318,10 @@ public:
     }
 
     // non-coplanar case
-    edge_to_faces[edge(eh,tm)].insert(face(fh, tm));
+    auto& fset = edge_to_faces[get(to_index, edge(eh, tm))];
+    if(fset.empty())
+      intersecting_edge.push_back(edge(eh, tm));
+    fset.insert(face(fh, tm));
   }
 
   template <class Box>
