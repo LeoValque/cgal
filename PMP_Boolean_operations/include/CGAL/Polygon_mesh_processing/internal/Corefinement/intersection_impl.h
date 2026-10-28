@@ -31,6 +31,15 @@
 #include <boost/container/flat_set.hpp>
 #include <boost/functional/hash.hpp>
 
+#ifdef CGAL_LINKED_WITH_TBB
+#include <tbb/concurrent_vector.h>
+#include <tbb/concurrent_unordered_set.h>
+#endif
+
+#ifdef CGAL_PMP_BENCH_FILTER_INTERSECTIONS
+#include <CGAL/Real_timer.h>
+#endif
+
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -210,7 +219,14 @@ class Intersection_of_triangle_meshes
   // using E2F_tag = typename CGAL::edge_index_t;
   using Edge_index_map = typename boost::property_map<TriangleMesh, CGAL::edge_index_t>::type;
   using Edge_to_faces = std::vector<Face_set>;
+#ifdef CGAL_LINKED_WITH_TBB
+  using Edge_index_range = std::conditional_t<
+    std::is_same_v<ConcurrencyTag, Parallel_tag>,
+    tbb::concurrent_vector<edge_descriptor>,
+    std::vector<edge_descriptor>>;
+#else
   using Edge_index_range = std::vector<edge_descriptor>;
+#endif
 
   static const bool Predicates_on_constructions_needed =
     Node_visitor::Predicates_on_constructions_needed;
@@ -219,6 +235,8 @@ class Intersection_of_triangle_meshes
   typedef std::set< Face_pair > Coplanar_face_set;
 
   typedef std::size_t Node_id;
+
+  std::array<CGAL_MUTEX, 2048> edge_mutex;
 
   // we use Face_pair_and_int and not Face_pair to handle coplanar case.
   // Indeed the boundary of the intersection of two coplanar triangles
@@ -263,6 +281,10 @@ class Intersection_of_triangle_meshes
                             ISEM1 is_shared_edge_map_1,
                             ISEM2 is_shared_edge_map_2)
   {
+#ifdef CGAL_PMP_BENCH_FILTER_INTERSECTIONS
+    Real_timer t;
+    t.start();
+#endif
     using Point = typename boost::property_traits<VPM1>::value_type;
     using GT = typename CGAL::Kernel_traits<Point>::Kernel;
     using AABB_tree_helper_1 = CGAL::Polygon_mesh_processing::internal::AABB_tree_graph_helper<TriangleMesh, GT, VPM1>;
@@ -297,6 +319,9 @@ class Intersection_of_triangle_meshes
 
     Tree_1 tree1;
     Tree_2 tree2;
+#ifdef CGAL_PMP_BENCH_FILTER_INTERSECTIONS
+   std::cout << "Prepare primitives: " << t.time() << std::endl;
+#endif
 
     auto process_candidates_without_non_manifold_map = [&](face_descriptor f_1, face_descriptor f_2, auto &callback12, auto &callback21){
       std::array<halfedge_descriptor, 3> hf1 = { halfedge(f_1, tm1),
@@ -308,10 +333,12 @@ class Intersection_of_triangle_meshes
                                                  next(next(halfedge(f_2, tm2), tm2), tm2) };
 
       for(halfedge_descriptor h : hf2){
+        CGAL_SCOPED_LOCK(edge_mutex[h % 2048]);
         if( is_border(h, tm2) || h < opposite(h, tm2))
           callback12(hf1[0], h);
       }
       for(halfedge_descriptor h : hf1){
+        CGAL_SCOPED_LOCK(edge_mutex[h % 2048]);
         if( is_border(h, tm1) || h < opposite(h, tm1))
           callback21(hf2[0], h);
       }
@@ -364,20 +391,35 @@ class Intersection_of_triangle_meshes
         tg.run([&]{ helper_1.template build<ConcurrencyTag>(tm1_faces_intersecting_bb, tree1, tm1, vpm1); });
         helper_2.template build<ConcurrencyTag>(tm2_faces_intersecting_bb, tree2, tm2, vpm2);
         tg.wait();
+#ifdef CGAL_PMP_BENCH_FILTER_INTERSECTIONS
+        std::cout << "Build tree: " << t.time() << std::endl;
+#endif
 
         tbb::concurrent_vector<std::pair<face_descriptor, face_descriptor>> inter;
         CGAL::AABB_trees::all_pairs_of_primitives_with_overlapping_bbox(tree1, tree2, std::back_inserter(inter), parameters::concurrency_tag(ConcurrencyTag()));
+#ifdef CGAL_PMP_BENCH_FILTER_INTERSECTIONS
+        std::cout << "Traversal: " << t.time() << std::endl;
+#endif
 
         // Callback are not thread safe since Edge_to_faces is not.
         // Edge_to_faces is an unordered_map<Edge_index, unordered_set<Face_index>>
         // pass them would be a lot of concurrent write and unefficient, use local vectors then merged and check doublon is probably better
         // Currently, in explored examples, this step is negligeable in runtime and thus not parallellized
         if(non_manifold_feature_map_1.non_manifold_edges.empty() && non_manifold_feature_map_2.non_manifold_edges.empty())
-          for(const auto& [f_1, f_2]: inter)
+          oneapi::tbb::parallel_for(std::size_t(0), inter.size(), [&](std::size_t i)
+          {
+            const auto& [f_1, f_2] = inter[i];
             process_candidates_without_non_manifold_map(f_1, f_2, callback12, callback21);
+          });
         else
-          for(const auto& [f_1, f_2]: inter)
+          oneapi::tbb::parallel_for(std::size_t(0), inter.size(), [&](std::size_t i)
+          {
+            const auto& [f_1, f_2] = inter[i];
             process_candidates_with_non_manifold_map(f_1, f_2, callback12, callback21);
+          });
+#ifdef CGAL_PMP_BENCH_FILTER_INTERSECTIONS
+        std::cout << "Compute intersections: " << t.time() << std::endl;
+#endif
       }
       else
 #endif
@@ -385,8 +427,15 @@ class Intersection_of_triangle_meshes
         helper_1.template build<ConcurrencyTag>(tree1, tm1, vpm1);
         helper_2.template build<ConcurrencyTag>(tree2, tm2, vpm2);
 
+#ifdef CGAL_PMP_BENCH_FILTER_INTERSECTIONS
+        std::cout << "Build tree: " << t.time() << std::endl;
+#endif
+
         std::vector<std::pair<face_descriptor, face_descriptor>> inter;
         CGAL::AABB_trees::all_pairs_of_primitives_with_overlapping_bbox(tree1, tree2, std::back_inserter(inter));
+#ifdef CGAL_PMP_BENCH_FILTER_INTERSECTIONS
+        std::cout << "Traversal: " << t.time() << std::endl;
+#endif
 
         if(non_manifold_feature_map_1.non_manifold_edges.empty() && non_manifold_feature_map_2.non_manifold_edges.empty())
           for(const auto& [f_1, f_2]: inter)
@@ -394,6 +443,9 @@ class Intersection_of_triangle_meshes
         else
           for(const auto& [f_1, f_2]: inter)
             process_candidates_with_non_manifold_map(f_1, f_2, callback12, callback21);
+#ifdef CGAL_PMP_BENCH_FILTER_INTERSECTIONS
+        std::cout << "Compute intersections: " << t.time() << std::endl;
+#endif
       }
     };
 
