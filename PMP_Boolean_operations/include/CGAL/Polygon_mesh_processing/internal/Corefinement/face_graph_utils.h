@@ -625,35 +625,6 @@ triangulate_a_face(
   user_visitor.after_subface_creations(tm);
 }
 
-template <class PolygonMesh>
-class Border_edge_map {
-  typedef boost::graph_traits<PolygonMesh> GT;
-  typedef typename GT::halfedge_descriptor halfedge_descriptor;
-  typedef typename GT::edge_descriptor edge_descriptor;
-  typedef std::unordered_set<edge_descriptor> Intersection_edge_map;
-  const Intersection_edge_map* intersection_edges;
-  const PolygonMesh* tm;
-public:
-  // required by the property forwarder of the filtered_graph in boost
-  Border_edge_map()
-   : intersection_edges(NULL)
-   , tm(NULL)
-  {}
-
-  Border_edge_map(const Intersection_edge_map& intersection_edges,
-                 const PolygonMesh& tm)
-   : intersection_edges(&intersection_edges)
-   , tm(&tm)
-  {}
-
-  friend
-  bool get(const Border_edge_map& map, edge_descriptor e)
-  {
-    if ( is_border(e,*map.tm) ) return false;
-    return map.intersection_edges->count(e)!=0;
-  }
-};
-
 template<class PolygonMesh>
 struct Patch_description{
   typedef boost::graph_traits<PolygonMesh> GT;
@@ -692,7 +663,7 @@ void extract_patch_simplices(
 
   for(face_descriptor f : patch.faces)  {
     for(halfedge_descriptor h : halfedges_around_face(halfedge(f, pm),pm))    {
-      if ( !is_intersection_edge.count(edge(h, pm)) )
+      if ( !get(is_intersection_edge, edge(h, pm) ) )
       {
         halfedge_descriptor h_opp = opposite(h, pm);
         if(is_border(h_opp,pm)){
@@ -858,7 +829,7 @@ next_marked_halfedge_around_target_vertex(
   CGAL_assertion( marked_edges.count(edge(h,pm))!= 0 );
   typename boost::graph_traits<PolygonMesh>::halfedge_descriptor nxt =
     next(h, pm);
-  while( !marked_edges.count(edge(nxt,pm)) )
+  while( !get(marked_edges, edge(nxt,pm)) )
   {
     nxt=next(opposite(nxt,pm),pm);
   }
