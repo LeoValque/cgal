@@ -30,6 +30,10 @@
 #include <boost/dynamic_bitset.hpp>
 #include <boost/mpl/has_xxx.hpp>
 
+#ifdef CGAL_PMP_BENCH_FACE_GRAPH_OUTPUT_BUILDER
+#include <CGAL/Real_timer.h>
+#endif
+
 // required to handle the multiple types of edge constrained maps
 // for the different output types. CGAL_COREF_FUNCTION_CALL_DEF
 // must be defined prior to using this macro.
@@ -848,6 +852,10 @@ public:
     const Mesh_to_map_node&,
     const std::vector<std::pair<face_descriptor, face_descriptor>>& identical_patches)
   {
+#ifdef CGAL_PMP_BENCH_FACE_GRAPH_OUTPUT_BUILDER
+    Real_timer t;
+    t.start();
+#endif
     const bool used_to_classify_patches =  requested_output[UNION]==std::nullopt &&
                                            requested_output[TM1_MINUS_TM2]==std::nullopt &&
                                            requested_output[TM2_MINUS_TM1]==std::nullopt &&
@@ -1056,6 +1064,9 @@ public:
     for(edge_descriptor ed : inter_edges_to_remove2)
       intersection_edges2.erase(ed);
 
+#ifdef CGAL_PMP_BENCH_FACE_GRAPH_OUTPUT_BUILDER
+    std::cout << "Initialization of output builder: " << t.time() << std::endl;
+#endif
     user_visitor.detect_patches();
 
     // (1) Assign a patch id to each facet indicating in which connected
@@ -1105,6 +1116,10 @@ public:
       connected_components_1();
       connected_components_2();
     }
+
+#ifdef CGAL_PMP_BENCH_FACE_GRAPH_OUTPUT_BUILDER
+    std::cout << "Detect patches time (connected components): " << t.time() << std::endl;
+#endif
 
 #ifdef CGAL_COREFINEMENT_DEBUG
     std::cout << "nb_patches_tm1 = " << nb_patches_tm1 << "\n";
@@ -2101,6 +2116,10 @@ public:
         return;
     }
 
+#ifdef CGAL_PMP_BENCH_FACE_GRAPH_OUTPUT_BUILDER
+    std::cout << "classify patches: " << t.time() << std::endl;
+#endif
+
     //to maintain a halfedge on each polyline + pair<bool,int>
     //with first = "is the key (pair<Node_id,Node_id>) was reversed?"
     // and second is the number of edges -1 in the polyline
@@ -2309,6 +2328,10 @@ public:
           patches_of_tm1_used[TM2_MINUS_TM1] |= ~coplanar_patches_of_tm1_for_union_and_intersection & coplanar_patches_of_tm1;
       }
     }
+
+#ifdef CGAL_PMP_BENCH_FACE_GRAPH_OUTPUT_BUILDER
+    std::cout << "extract coplanar patches: " << t.time() << std::endl;
+#endif
 
     #ifdef CGAL_COREFINEMENT_DEBUG
     std::cout << "patches_of_tm1_used[UNION] " << patches_of_tm1_used[UNION] << "\n";
@@ -2760,6 +2783,9 @@ public:
                                   ~patches_of_tm2_used[inplace_operation_tm2],
                                   patches_of_tm2);
       }
+#ifdef CGAL_PMP_BENCH_FACE_GRAPH_OUTPUT_BUILDER
+    std::cout << "copy patches in mesh: " << t.time() << std::endl;
+#endif
   }
 };
 
