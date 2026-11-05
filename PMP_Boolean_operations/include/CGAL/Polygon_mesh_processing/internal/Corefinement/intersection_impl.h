@@ -34,6 +34,7 @@
 #ifdef CGAL_LINKED_WITH_TBB
 #include <tbb/concurrent_vector.h>
 #include <tbb/concurrent_unordered_set.h>
+#include <tbb/parallel_sort.h>
 #endif
 
 #ifdef CGAL_PMP_BENCH_FILTER_INTERSECTIONS
@@ -304,14 +305,40 @@ class Intersection_of_triangle_meshes
     tm1_edge_to_tm2_faces.resize(num_edges(tm1));
     tm2_edge_to_tm1_faces.resize(num_edges(tm2));
 
-    for(face_descriptor f: faces(tm1))
-      if( !get(is_shared_face_map_1, f) &&
-           do_overlap(face_bbox(f, tm1, parameters::vertex_point_map(vpm1)), bb))
-        tm1_faces_intersecting_bb.push_back(f);
-    for(face_descriptor f: faces(tm2))
-      if( !get(is_shared_face_map_2, f) &&
-           do_overlap(face_bbox(f, tm2, parameters::vertex_point_map(vpm2)), bb))
-        tm2_faces_intersecting_bb.push_back(f);
+    auto collect_faces_intersecting_bb = [&](const TriangleMesh& tm, const auto& vpm,
+                                              const auto& shared_face_map,
+                                              std::vector<face_descriptor>& result)
+    {
+#ifdef CGAL_LINKED_WITH_TBB
+      if constexpr(std::is_same_v<ConcurrencyTag, Parallel_tag>)
+      {
+        std::vector<face_descriptor> all_faces(faces(tm).first, faces(tm).second);
+        CGAL_MUTEX result_mutex;
+        oneapi::tbb::parallel_for(oneapi::tbb::blocked_range<std::size_t>(0, all_faces.size()),
+          [&](const oneapi::tbb::blocked_range<std::size_t>& range)
+          {
+            std::vector<face_descriptor> local_patch;
+            for(std::size_t i = range.begin(); i != range.end(); ++i)
+            {
+              face_descriptor f = all_faces[i];
+              if(!get(shared_face_map, f) && do_overlap(face_bbox(f, tm, parameters::vertex_point_map(vpm)), bb))
+                local_patch.push_back(f);
+            }
+            CGAL_SCOPED_LOCK(result_mutex);
+            result.insert(result.end(), local_patch.begin(), local_patch.end());
+          });
+        return;
+      }
+      else
+#endif
+      {
+        for(face_descriptor f: faces(tm))
+          if(!get(shared_face_map, f) && do_overlap(face_bbox(f, tm, parameters::vertex_point_map(vpm)), bb))
+            result.push_back(f);
+      }
+    };
+    collect_faces_intersecting_bb(tm1, vpm1, is_shared_face_map_1, tm1_faces_intersecting_bb);
+    collect_faces_intersecting_bb(tm2, vpm2, is_shared_face_map_2, tm2_faces_intersecting_bb);
 
     // If one set is empty, no intersection
     if(tm1_faces_intersecting_bb.empty() || tm2_faces_intersecting_bb.empty())
@@ -1940,12 +1967,26 @@ public:
       }
     }
 
-    std::sort(tm1_verts.begin(), tm1_verts.end(),
-              [&vpm1](vertex_descriptor v1, vertex_descriptor v2)
-              { return get(vpm1, v1) < get(vpm1, v2);});
-    std::sort(tm2_verts.begin(), tm2_verts.end(),
-              [&vpm2](vertex_descriptor v1, vertex_descriptor v2)
-              { return get(vpm2, v1) < get(vpm2, v2);});
+#ifdef CGAL_LINKED_WITH_TBB
+    if constexpr(std::is_same_v<ConcurrencyTag, Parallel_tag>)
+    {
+      oneapi::tbb::parallel_sort(tm1_verts.begin(), tm1_verts.end(),
+                                [&vpm1](vertex_descriptor v1, vertex_descriptor v2)
+                                { return get(vpm1, v1) < get(vpm1, v2);});
+      oneapi::tbb::parallel_sort(tm2_verts.begin(), tm2_verts.end(),
+                                [&vpm2](vertex_descriptor v1, vertex_descriptor v2)
+                                { return get(vpm2, v1) < get(vpm2, v2);});
+    }
+    else
+#endif
+    {
+      std::sort(tm1_verts.begin(), tm1_verts.end(),
+                [&vpm1](vertex_descriptor v1, vertex_descriptor v2)
+                { return get(vpm1, v1) < get(vpm1, v2);});
+      std::sort(tm2_verts.begin(), tm2_verts.end(),
+                [&vpm2](vertex_descriptor v1, vertex_descriptor v2)
+                { return get(vpm2, v1) < get(vpm2, v2);});
+    }
 
     static constexpr std::size_t NOT_SHARED = std::size_t(-1);
     auto is_vshared_map1 = get(CGAL::dynamic_vertex_property_t<std::size_t>(), tm1, NOT_SHARED);
