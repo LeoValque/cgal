@@ -29,21 +29,20 @@ template<bool in_order, typename Value1, typename Value2, typename OutputIterato
 class Wrap_output_iterator
 {
   Value1 first;
-  OutputIterator out;
+  OutputIterator& out;
 public:
-  Wrap_output_iterator(Value1 first_, OutputIterator out_): first(first_), out(out_){}
+  Wrap_output_iterator(Value1 first_, OutputIterator& out_): first(first_), out(out_){}
 
   Wrap_output_iterator& operator=(Value2 second){
     if constexpr(in_order)
-      *out = std::make_pair(first, second);
+      *out++ = std::make_pair(first, second);
     else
-      *out = std::make_pair(second, first);
+      *out++ = std::make_pair(second, first);
     return *this;
   }
   Wrap_output_iterator& operator*(){ return *this; }
-  Wrap_output_iterator& operator++(){ ++out; return *this; }
-  Wrap_output_iterator  operator++(int){ auto tmp = *this; ++out; return tmp; }
-  Wrap_output_iterator& operator+(int d){ out += d; return *this; }
+  Wrap_output_iterator& operator++(){ return *this; }
+  Wrap_output_iterator& operator++(int){ return *this;}
 };
 
 template<typename AABBTraits1, typename AABBTraits2, typename OutputIterator>
@@ -55,7 +54,7 @@ class Two_trees_listing_intersecting_primitives_traits
   typedef ::CGAL::AABB_node<AABBTraits2> Node2;
 
 public:
-  Two_trees_listing_intersecting_primitives_traits(const AABBTraits1& traits1, const AABBTraits2& traits2, OutputIterator out_)
+  Two_trees_listing_intersecting_primitives_traits(const AABBTraits1& traits1, const AABBTraits2& traits2, OutputIterator& out_)
     : m_traits1(traits1), m_traits2(traits2), out(out_)
   {}
 
@@ -101,7 +100,7 @@ public:
 private:
   const AABBTraits1& m_traits1;
   const AABBTraits2& m_traits2;
-  OutputIterator out;
+  OutputIterator& out;
 };
 
 template<typename AABBTraits1, typename AABBTraits2, typename OutputIterator, typename AffTransformation, bool Protected=true, class Use_inverse_transformation=Tag_false>
@@ -114,7 +113,7 @@ class Two_trees_listing_intersecting_primitives_traits_with_transformation
 
 public:
   Two_trees_listing_intersecting_primitives_traits_with_transformation(const AABBTraits1& traits1, const AABBTraits2& traits2,
-                                                                       OutputIterator out_,
+                                                                       OutputIterator& out_,
                                                                        const AffTransformation &tr1, const AffTransformation &tr2)
     : m_traits1(traits1), m_traits2(traits2),
       out(out_),
@@ -200,7 +199,7 @@ public:
 private:
   const AABBTraits1& m_traits1;
   const AABBTraits2& m_traits2;
-  OutputIterator out;
+  OutputIterator& out;
   const AffTransformation& m_tr1;
   const AffTransformation& m_tr2;
   AffTransformation m_tr1_inverse;
@@ -360,8 +359,6 @@ public:
 
   void intersection(const Primitive1& primitive1, const Primitive2& primitive2)
   {
-    Do_intersect_traits<AABBTraits2, typename AABBTraits1::Primitive::Datum> traits(m_traits2);
-    traits.intersection(internal::Primitive_helper<AABBTraits1>::get_datum(primitive1, m_traits1), primitive2);
     if constexpr(Use_inverse_transformation::value)
     {
       Do_intersect_traits<AABBTraits2, typename AABBTraits1::Primitive::Datum> traits(m_traits2);

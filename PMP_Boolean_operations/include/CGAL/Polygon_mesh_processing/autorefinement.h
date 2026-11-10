@@ -24,11 +24,11 @@
 #include <CGAL/Projection_traits_3.h>
 #include <CGAL/Exact_predicates_exact_constructions_kernel.h>
 
-#include <CGAL/box_intersection_d.h>
-
 #ifdef CGAL_AUTOREF_USE_PROGRESS_DISPLAY
 #include <boost/timer/progress_display.hpp>
 #endif
+
+#include <CGAL/box_intersection_d.h>
 
 // output
 #include <CGAL/Polygon_mesh_processing/orient_polygon_soup_extension.h>

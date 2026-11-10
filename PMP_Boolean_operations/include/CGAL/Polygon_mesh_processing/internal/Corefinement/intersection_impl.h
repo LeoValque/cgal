@@ -27,6 +27,10 @@
 #include <CGAL/AABB_trees/intersection.h>
 #include <CGAL/utility.h>
 
+#ifdef CGAL_LINKED_WITH_TBB
+#include <tbb/concurrent_vector.h>
+#endif
+
 #include <boost/dynamic_bitset.hpp>
 #include <boost/container/flat_set.hpp>
 #include <boost/functional/hash.hpp>
@@ -297,8 +301,8 @@ class Intersection_of_triangle_meshes
 
     std::vector<face_descriptor> tm1_faces_intersecting_bb;
     std::vector<face_descriptor> tm2_faces_intersecting_bb;
-    tm1_faces_intersecting_bb.reserve(num_faces(tm1));
-    tm2_faces_intersecting_bb.reserve(num_faces(tm2));
+    tm1_faces_intersecting_bb.reserve((std::min)(faces(tm1).size(), faces(tm2).size()));
+    tm2_faces_intersecting_bb.reserve((std::min)(faces(tm1).size(), faces(tm2).size()));
 
     tm1_edge_index = get(CGAL::edge_index, tm1);
     tm2_edge_index = get(CGAL::edge_index, tm2);
@@ -361,12 +365,12 @@ class Intersection_of_triangle_meshes
 
       for(halfedge_descriptor h : hf2){
         CGAL_SCOPED_LOCK(edge_mutex[h % 2048]);
-        if( is_border(h, tm2) || h < opposite(h, tm2))
+        if( (is_border_edge(h, tm2) || h < opposite(h, tm2)) && !get(is_shared_edge_map_2, edge(h, tm2)))
           callback12(hf1[0], h);
       }
       for(halfedge_descriptor h : hf1){
         CGAL_SCOPED_LOCK(edge_mutex[h % 2048]);
-        if( is_border(h, tm1) || h < opposite(h, tm1))
+        if( (is_border_edge(h, tm1) || h < opposite(h, tm1)) && !get(is_shared_edge_map_1, edge(h, tm1)))
           callback21(hf2[0], h);
       }
     };
@@ -390,7 +394,7 @@ class Intersection_of_triangle_meshes
             // make sure the halfedge used is consistent with stored one
             h = halfedge(non_manifold_feature_map_2.non_manifold_edges[eid].front(), tm2);
         }
-        if( !get(is_shared_edge_map_2, ed) && (is_border(h, tm2) || h < opposite(h, tm2)))
+        if( !get(is_shared_edge_map_2, ed) && (is_border_edge(h, tm2) || h < opposite(h, tm2)))
           callback12(hf1[0], h);
       }
       for(halfedge_descriptor h : hf1){
@@ -404,7 +408,7 @@ class Intersection_of_triangle_meshes
             // make sure the halfedge used is consistent with stored one
             h = halfedge(non_manifold_feature_map_1.non_manifold_edges[eid].front(), tm1);
         }
-        if( !get(is_shared_edge_map_1, ed) && (is_border(h, tm1) || h < opposite(h, tm1)))
+        if( !get(is_shared_edge_map_1, ed) && (is_border_edge(h, tm1) || h < opposite(h, tm1)))
           callback21(hf2[0], h);
       }
     };
@@ -412,7 +416,7 @@ class Intersection_of_triangle_meshes
     // Wrap the call of AABB intersections given two callback functions
     auto AABB_call = [&](auto &callback12, auto &callback21){
 #ifdef CGAL_LINKED_WITH_TBB
-      if constexpr(std::is_same_v<ConcurrencyTag, Parallel_tag>)
+      if constexpr(ConcurrencyTag::is_parallel)
       {
         oneapi::tbb::task_group tg;
         tg.run([&]{ helper_1.template build<ConcurrencyTag>(tm1_faces_intersecting_bb, tree1, tm1, vpm1); });
@@ -451,8 +455,8 @@ class Intersection_of_triangle_meshes
       else
 #endif
       {
-        helper_1.template build<ConcurrencyTag>(tree1, tm1, vpm1);
-        helper_2.template build<ConcurrencyTag>(tree2, tm2, vpm2);
+        helper_1.template build<ConcurrencyTag>(tm1_faces_intersecting_bb, tree1, tm1, vpm1);
+        helper_2.template build<ConcurrencyTag>(tm2_faces_intersecting_bb, tree2, tm2, vpm2);
 
 #ifdef CGAL_PMP_BENCH_FILTER_INTERSECTIONS
         std::cout << "Build tree: " << t.time() << std::endl;
@@ -492,6 +496,7 @@ class Intersection_of_triangle_meshes
     else {
       if (const_mesh_ptr==&tm1)
       {
+        // tm1 might feature degenerate features
         auto filtered_callback_12 = [&](halfedge_descriptor h1, halfedge_descriptor h2){
           if (get(vpm2, source(h2, tm2)) != get(vpm2, target(h2, tm2)))
             callback12(h1, h2);
@@ -528,7 +533,7 @@ class Intersection_of_triangle_meshes
       {
         if (const_mesh_ptr==&tm2)
         {
-          // tm2 might feature
+          // tm2 might feature degenerate features
           auto filtered_callback_12 = [&](halfedge_descriptor h1, halfedge_descriptor h2){
             if(!callback12.is_face_degenerated(h1))
               callback12(h1, h2);
@@ -574,7 +579,8 @@ class Intersection_of_triangle_meshes
   void filter_intersections(const TriangleMesh& tm,
                             const VPM& vpm)
   {
-    using GT = typename GetGeomTraits<TriangleMesh, parameters::Default_named_parameters>::type;
+    using Point = typename boost::property_traits<VPM>::value_type;
+    using GT = typename CGAL::Kernel_traits<Point>::Kernel;
     using AABB_tree_helper = CGAL::Polygon_mesh_processing::internal::AABB_tree_graph_helper<TriangleMesh, GT, VPM>;
     using Tree = typename AABB_tree_helper::Tree;
     AABB_tree_helper helper;
@@ -589,69 +595,48 @@ class Intersection_of_triangle_meshes
                       TriangleMesh, VPM, Edge_to_faces, Edge_index_map, Edge_index_range, Coplanar_face_set>;
     Callback callback(tm, vpm, tm1_edge_to_tm2_faces, tm1_edge_index, tm1_intersecting_edges, coplanar_faces);
 
-  #ifdef CGAL_LINKED_WITH_TBB
-    if constexpr(std::is_same_v<ConcurrencyTag, Parallel_tag>)
+#ifdef CGAL_LINKED_WITH_TBB
+    using Intersections = std::conditional_t<ConcurrencyTag::is_parallel,
+      tbb::concurrent_vector<std::pair<face_descriptor, face_descriptor>>,
+      std::vector<std::pair<face_descriptor, face_descriptor>>>;
+#else
+    using Intersections = std::vector<std::pair<face_descriptor, face_descriptor>>;
+#endif
+    Intersections inter;
+#ifdef CGAL_LINKED_WITH_TBB
+    if constexpr(ConcurrencyTag::is_parallel)
     {
-      tbb::concurrent_vector<std::pair<face_descriptor, face_descriptor>> inter;
       CGAL::AABB_trees::all_pairs_of_intersecting_primitives<ConcurrencyTag>(tree, std::back_inserter(inter));
-
-      // tbb::parallel_for(std::size_t(0), inter.size(), [&](std::size_t i){
-      for(std::size_t i=0; i<inter.size(); ++i){
-        const auto& [f_1, f_2] = inter[i];
-
-        halfedge_descriptor h0_f1 = halfedge(f_1, tm);
-        halfedge_descriptor h1_f1 = next(h0_f1, tm);
-        halfedge_descriptor h2_f1 = next(h1_f1, tm);
-
-        halfedge_descriptor h0_f2 = halfedge(f_2, tm);
-        halfedge_descriptor h1_f2 = next(h0_f2, tm);
-        halfedge_descriptor h2_f2 = next(h1_f2, tm);
-
-        if (is_border(h0_f1, tm) || h0_f1 < opposite(h0_f1, tm))
-          callback(h0_f2, h0_f1);
-        if (is_border(h1_f1, tm) || h1_f1 < opposite(h1_f1, tm))
-          callback(h0_f2, h1_f1);
-        if (is_border(h2_f1, tm) || h2_f1 < opposite(h2_f1, tm))
-          callback(h0_f2, h2_f1);
-
-        if (is_border(h0_f2, tm) || h0_f2 < opposite(h0_f2, tm))
-          callback(h0_f1, h0_f2);
-        if (is_border(h1_f2, tm) || h1_f2 < opposite(h1_f2, tm))
-          callback(h0_f1, h1_f2);
-        if (is_border(h2_f2, tm) || h2_f2 < opposite(h2_f2, tm))
-          callback(h0_f1, h2_f2);
-      // });
-      }
     }
     else
 #endif
     {
-      std::vector<std::pair<face_descriptor, face_descriptor>> inter;
       CGAL::AABB_trees::all_pairs_of_intersecting_primitives(tree, std::back_inserter(inter));
+    }
+    for(std::size_t i=0; i<inter.size(); ++i){
+      const auto& [f_1, f_2] = inter[i];
 
-      for(const auto& [f_1, f_2]: inter){
-        halfedge_descriptor h0_f1 = halfedge(f_1, tm);
-        halfedge_descriptor h1_f1 = next(h0_f1, tm);
-        halfedge_descriptor h2_f1 = next(h1_f1, tm);
+      halfedge_descriptor h0_f1 = halfedge(f_1, tm);
+      halfedge_descriptor h1_f1 = next(h0_f1, tm);
+      halfedge_descriptor h2_f1 = next(h1_f1, tm);
 
-        halfedge_descriptor h0_f2 = halfedge(f_2, tm);
-        halfedge_descriptor h1_f2 = next(h0_f2, tm);
-        halfedge_descriptor h2_f2 = next(h1_f2, tm);
+      halfedge_descriptor h0_f2 = halfedge(f_2, tm);
+      halfedge_descriptor h1_f2 = next(h0_f2, tm);
+      halfedge_descriptor h2_f2 = next(h1_f2, tm);
 
-        if (is_border(h0_f1, tm) || h0_f1 < opposite(h0_f1, tm))
-          callback(h0_f2, h0_f1);
-        if (is_border(h1_f1, tm) || h1_f1 < opposite(h1_f1, tm))
-          callback(h0_f2, h1_f1);
-        if (is_border(h2_f1, tm) || h2_f1 < opposite(h2_f1, tm))
-          callback(h0_f2, h2_f1);
+      if (is_border_edge(h0_f1, tm) || h0_f1 < opposite(h0_f1, tm))
+        callback(h0_f2, h0_f1);
+      if (is_border_edge(h1_f1, tm) || h1_f1 < opposite(h1_f1, tm))
+        callback(h0_f2, h1_f1);
+      if (is_border_edge(h2_f1, tm) || h2_f1 < opposite(h2_f1, tm))
+        callback(h0_f2, h2_f1);
 
-        if (is_border(h0_f2, tm) || h0_f2 < opposite(h0_f2, tm))
-          callback(h0_f1, h0_f2);
-        if (is_border(h1_f2, tm) || h1_f2 < opposite(h1_f2, tm))
-          callback(h0_f1, h1_f2);
-        if (is_border(h2_f2, tm) || h2_f2 < opposite(h2_f2, tm))
-          callback(h0_f1, h2_f2);
-      }
+      if (is_border_edge(h0_f2, tm) || h0_f2 < opposite(h0_f2, tm))
+        callback(h0_f1, h0_f2);
+      if (is_border_edge(h1_f2, tm) || h1_f2 < opposite(h1_f2, tm))
+        callback(h0_f1, h1_f2);
+      if (is_border_edge(h2_f2, tm) || h2_f2 < opposite(h2_f2, tm))
+        callback(h0_f1, h2_f2);
     }
   }
 

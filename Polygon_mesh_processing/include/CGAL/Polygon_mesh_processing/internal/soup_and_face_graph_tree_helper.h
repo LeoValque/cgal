@@ -13,7 +13,7 @@
 #ifndef CGAL_POLYGON_MESH_PROCESSING_INTERNAL_SOUP_AND_TREE_HELPER_H
 #define CGAL_POLYGON_MESH_PROCESSING_INTERNAL_SOUP_AND_TREE_HELPER_H
 
-#include <CGAL/license/Polygon_mesh_processing/corefinement.h>
+#include <CGAL/license/Polygon_mesh_processing/predicate.h>
 
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 
@@ -25,9 +25,6 @@
 
 #include <CGAL/Polygon_mesh_processing/bbox.h>
 #include <CGAL/property_map.h>
-#include <fstream>
-#include <sstream>
-#include <set>
 #include <type_traits>
 
 namespace CGAL {
@@ -82,6 +79,7 @@ struct AABB_tree_graph_helper
   template<class Concurrency_tag=Sequential_tag, class FaceRange, class VertexPointMap>
   void build(const FaceRange &face_range, Tree& tree, const TriangleMesh& tm, VertexPointMap& vpm){
     using Face_bbox_tag = typename CGAL::dynamic_face_property_t<Bbox_3>;
+    // Reference point do not need to be exact, so we use Epick for them
     using Face_ref_point_tag = typename CGAL::dynamic_face_property_t<Epick::Point_3>;
     using Bbox_map = typename boost::property_map<TriangleMesh, Face_bbox_tag>::const_type;
     using Ref_point_map = typename boost::property_map<TriangleMesh, Face_ref_point_tag>::const_type;
@@ -93,19 +91,26 @@ struct AABB_tree_graph_helper
     Ref_point_map rp_map = get(Face_ref_point_tag(), tm);
 
 #ifdef CGAL_LINKED_WITH_TBB
-    if constexpr(std::is_same_v<Concurrency_tag, Parallel_tag>)
+    if constexpr(Concurrency_tag::is_parallel)
     {
-      tbb::parallel_for(std::size_t(0), face_range.size(), [&](std::size_t i){
-        face_descriptor f = face_range[i];
-        put(bb_map, f, face_bbox(f, tm));
-        put(rp_map, f, to_input(get(vpm, target(halfedge(f, tm), tm))) );
-      });
+      tbb::parallel_for(
+        tbb::blocked_range<std::size_t>(0, face_range.size()),
+        [&](const tbb::blocked_range<std::size_t>& block)
+        {
+          auto it = std::next(std::begin(face_range), block.begin());
+          for (std::size_t i = block.begin(); i != block.end(); ++i, ++it)
+          {
+            face_descriptor f = *it;
+            put(bb_map, f, face_bbox(f, tm, parameters::vertex_point_map(vpm)));
+            put(rp_map, f, to_input(get(vpm, target(halfedge(f, tm), tm))));
+          }
+        });
     }
     else
 #endif
     {
       for(face_descriptor f : face_range){
-        put(bb_map, f, face_bbox(f, tm));
+        put(bb_map, f, face_bbox(f, tm, parameters::vertex_point_map(vpm)));
         put(rp_map, f, to_input(get(vpm, target(halfedge(f, tm), tm))) );
       }
     }
@@ -180,8 +185,8 @@ struct AABB_tree_soup_helper
     CGAL::Bbox_3 operator()(ConstPrimitiveIterator first,
                             ConstPrimitiveIterator beyond) const
     {
-      CGAL::Bbox_3 bbox = get(bpm, first->id());
-      for(++first; first != beyond; ++first)
+      CGAL::Bbox_3 bbox;
+      for(; first != beyond; ++first)
         bbox += get(bpm, first->id());
       return bbox;
     }
@@ -204,14 +209,14 @@ struct AABB_tree_soup_helper
     Ref_point_map rp_map = make_property_map(rp_vector);
 
 #ifdef CGAL_LINKED_WITH_TBB
-    if constexpr(std::is_same_v<ConcurrencyTag, Parallel_tag>)
+    if constexpr(ConcurrencyTag::is_parallel)
     {
       tbb::parallel_for(std::size_t(0), face_range.size(), [&](std::size_t i){
-        i = face_range[i];
-        put(bb_map, i, get(vpm, triangles[i][0]).bbox() +
-                       get(vpm, triangles[i][1]).bbox() +
-                       get(vpm, triangles[i][2]).bbox());
-        put(rp_map, i, to_input(get(vpm, triangles[i][0])) );
+        auto tid = face_range[i];
+        put(bb_map, tid, get(vpm, triangles[tid][0]).bbox() +
+                         get(vpm, triangles[tid][1]).bbox() +
+                         get(vpm, triangles[tid][2]).bbox());
+        put(rp_map, tid, to_input(get(vpm, triangles[tid][0])) );
       });
     }
     else
