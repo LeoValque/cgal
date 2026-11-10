@@ -107,9 +107,13 @@ namespace CGAL {
     };
     #endif
 
+    struct Build_parallel_cutoff
+    {
+      // Min size for parallel call in expand
+      static constexpr std::size_t value = 30000;
+    };
 
     ///@}
-
   public:
     /// \name Creation
     ///@{
@@ -832,45 +836,101 @@ public:
                         const SplitPrimitives& split_primitives)
   {
 #ifdef CGAL_LINKED_WITH_TBB
-    const std::size_t cutoff_parallel_call = 30000; // min size for parallel call
-#endif
-    node.set_bbox(compute_bbox(first, beyond));
-
-    // sort primitives along longest axis aabb
-    split_primitives(first, beyond, node.bbox());
-
-    switch(range)
+    if constexpr(ConcurrencyTag::is_parallel)
     {
-    case 2:
-      node.set_children(*first, *(first+1));
-      break;
-    case 3:
-      node.set_children(*first, m_nodes[node_index+1]);
-      expand(node.right_child(), node_index+1, first+1, beyond, 2, compute_bbox, split_primitives);
-      break;
-    default:
-      const std::size_t new_range = range/2;
+      node.set_bbox(compute_bbox(first, beyond));
+
+      // sort primitives along longest axis aabb
+      split_primitives(first, beyond, node.bbox());
+
+      std::size_t new_range = range / 2;
       node.set_children(m_nodes[node_index+1], m_nodes[node_index+new_range]);
-#ifdef CGAL_LINKED_WITH_TBB
-      if constexpr(ConcurrencyTag::is_parallel)
-      {
-        if(range > cutoff_parallel_call){
-          oneapi::tbb::task_group tg;
-          tg.run([&]{
-                  expand<ConcurrencyTag>(node.left_child(), node_index+1, first, first + new_range, new_range, compute_bbox, split_primitives); }
-                );
-          expand<ConcurrencyTag>(node.right_child(), node_index+new_range, first + new_range, beyond, range - new_range, compute_bbox, split_primitives);
-          tg.wait();
-        } else {
-          expand(node.left_child(), node_index+1, first, first + new_range, new_range, compute_bbox, split_primitives);
-          expand(node.right_child(), node_index+new_range, first + new_range, beyond, range - new_range, compute_bbox, split_primitives);
-        }
-      }
-      else
-#endif
-      {
+      if(range > Build_parallel_cutoff::value){
+        oneapi::tbb::task_group tg;
+        tg.run([&]{
+                expand<ConcurrencyTag>(node.left_child(), node_index+1, first, first + new_range, new_range, compute_bbox, split_primitives); }
+              );
+        expand<ConcurrencyTag>(node.right_child(), node_index+new_range, first + new_range, beyond, range - new_range, compute_bbox, split_primitives);
+        tg.wait();
+      } else {
         expand(node.left_child(), node_index+1, first, first + new_range, new_range, compute_bbox, split_primitives);
         expand(node.right_child(), node_index+new_range, first + new_range, beyond, range - new_range, compute_bbox, split_primitives);
+      }
+    }
+    else
+#endif
+    {
+      // Traverse the nodes sequentially in preorder.
+      // For an internal node i, associated with the primitive range [f, f + r):
+      // - The left child is node i + 1, associated with [f, f + r/2).
+      // - The right child is node i + r/2, associated with [f + r/2, f + r).
+      //
+      // When visiting an internal node, push the information for its right subtree
+      // onto the stack, then continue with its left subtree.
+      //
+      // When reaching a half-leaf (r == 3), the left child is a leaf and the right child is node i+1
+      //
+      // When reaching a leaf (r == 2), a subtree is complete.
+      // Pop the stack to retrieve the next pending right subtree
+      struct Pending_subtree_information
+      {
+        std::size_t range;
+        ConstPrimitiveIterator first;
+
+        Pending_subtree_information(std::size_t range, ConstPrimitiveIterator first)
+          : range(range), first(first)
+        {}
+      };
+      std::vector<Pending_subtree_information> stack;
+
+      stack.reserve(std::numeric_limits<std::size_t>::digits);
+
+      std::size_t current_range = range;
+      auto current_first = first;
+      std::size_t end_index = node_index + range - 1;
+
+      for (std::size_t i = node_index; i < end_index; ++i)
+      {
+        Node& node = m_nodes[i];
+
+        if (current_range == 2)
+        {
+          node.set_bbox(compute_bbox(current_first, current_first + 2));
+          node.set_children(*current_first, *(current_first + 1));
+
+          // next index is a new subtree
+          // read in the stack the informations of the next subtree
+          if(i != end_index-1){
+            CGAL_assertion(!stack.empty());
+            current_range = stack.back().range;
+            current_first = stack.back().first;
+            stack.pop_back();
+            CGAL_assertion(current_first + current_range <= beyond);
+          }
+        }
+        else if (current_range == 3)
+        {
+          node.set_bbox(compute_bbox(current_first, current_first + 3));
+          node.set_children(*current_first, m_nodes[i + 1]);
+          // next index is the right child
+          current_range = 2;
+          ++current_first;
+        }
+        else
+        {
+          node.set_bbox(compute_bbox(current_first, current_first + current_range));
+
+          // sort primitives along longest axis aabb
+          split_primitives(current_first, current_first + current_range, node.bbox());
+
+          const std::size_t left_range = current_range / 2;
+          node.set_children(m_nodes[i + 1], m_nodes[i + left_range]);
+
+          // write in the stack the informations of the right child
+          stack.emplace_back(current_range - left_range, current_first + left_range);
+          // next index is the left child
+          current_range = left_range;
+        }
       }
     }
   }
@@ -893,13 +953,9 @@ public:
     const SplitPrimitives& split_primitives)
   {
     clear_nodes();
-
-    if(m_primitives.size() > 1) {
-
-      // allocates tree nodes
+#ifdef CGAL_LINKED_WITH_TBB
+    if(m_primitives.size() > Build_parallel_cutoff::value) {
       m_nodes.resize(m_primitives.size()-1);
-
-      // constructs the tree
       expand<ConcurrencyTag>(m_nodes[0],
                               0,
                               m_primitives.begin(), m_primitives.end(),
@@ -907,6 +963,22 @@ public:
                               compute_bbox,
                               split_primitives);
     }
+    else
+#endif
+    if(m_primitives.size() > 1)
+    {
+      // allocates tree nodes
+      m_nodes.resize(m_primitives.size()-1);
+
+      // constructs the tree
+      expand(m_nodes[0],
+              0,
+              m_primitives.begin(), m_primitives.end(),
+              m_primitives.size(),
+              compute_bbox,
+              split_primitives);
+    }
+
 #ifdef CGAL_HAS_THREADS
     m_atomic_need_build.store(false, std::memory_order_release); // in case build() is triggered by a call to root_node()
 #else
@@ -999,9 +1071,6 @@ public:
                                 const ComputeBbox& compute_bbox,
                                 const SplitPrimitives& split_primitives)
   {
-#ifdef CGAL_LINKED_WITH_TBB
-    const std::size_t cutoff_parallel_call = 30000; // min size for parallel call
-#endif
     node.set_bbox(compute_bbox(first, beyond));
 
     if(range < cutoff)
@@ -1017,7 +1086,7 @@ public:
 #ifdef CGAL_LINKED_WITH_TBB
       if constexpr(ConcurrencyTag::is_parallel)
       {
-        if(range > cutoff_parallel_call){
+        if(range > Build_parallel_cutoff::value){
           oneapi::tbb::task_group tg;
           tg.run([&]{
                   partial_expand<ConcurrencyTag>(node.left_child(), node_index+1, first, first + new_range, new_range, cutoff, compute_bbox, split_primitives); }
