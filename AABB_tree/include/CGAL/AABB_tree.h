@@ -157,9 +157,16 @@ namespace CGAL {
     /// triggers the (re)construction of the tree similarly to a call to `build()`
     /// but the traits functors `Compute_bbox` and `Split_primitives` are ignored
     /// and `compute_bbox` and `split_primitives` are used instead.
-    template <class ConcurrencyTag=Sequential_tag, class ComputeBbox, class SplitPrimitives>
+    template <class ConcurrencyTag=Sequential_tag, bool postprocess_bbox_computation, class ComputeBbox, class SplitPrimitives>
     void custom_build(const ComputeBbox& compute_bbox,
                       const SplitPrimitives& split_primitives);
+
+    template <class ConcurrencyTag=Sequential_tag, class ComputeBbox, class SplitPrimitives>
+    void custom_build(const ComputeBbox& compute_bbox,
+                      const SplitPrimitives& split_primitives)
+    {
+      custom_build<ConcurrencyTag, false>(compute_bbox, split_primitives);
+    }
 #endif
     ///@}
 
@@ -786,19 +793,24 @@ public:
 
 namespace internal {
 namespace AABB_tree {
-  template<typename NodeIterator, typename ConstPrimitiveIterator, typename ComputeBbox, typename SplitPrimitives>
+  template<bool postprocess_bbox_computation = false,
+           typename NodeIterator,
+           typename ConstPrimitiveIterator,
+           typename ComputeBbox,
+           typename SplitPrimitives>
   void sequential_expand(NodeIterator node,
                          ConstPrimitiveIterator first,
                          std::size_t range,
                          const ComputeBbox& compute_bbox,
                          const SplitPrimitives& split_primitives)
   {
+    // ______________ Sequential Build Algorithm ______________
     // Traverse the nodes sequentially in preorder.
     // For an internal node i, associated with the primitive range [f, f + r):
     // - The left child is node i + 1, associated with [f, f + r/2).
     // - The right child is node i + r/2, associated with [f + r/2, f + r).
     //
-    // When visiting an internal node, write the information of its two children
+    // When visiting an internal node, write the information of its two children.
     // Then continue with left child (its the next one)
     //
     // When reaching a half-leaf (r == 3), the left child is a leaf.
@@ -807,6 +819,15 @@ namespace AABB_tree {
     // When reaching a leaf (r == 2), a subtree is complete.
     // Read informations of the next node
 
+    // ______________ Post processing bbox computation _______________
+    // Computed bbox of a node directly as O(range) cost.
+    // If post processing bbox is enable,
+    // we compute an approximate bbox for split_primitives decision instead.
+    // True bbox of a node will be computed in postprocess from last node to first
+    // using the bbox of its two children.
+    // Since we use an approximate bbox for split_primitives, this may degrade the tree quality.
+
+    const NodeIterator begin = node;
     const NodeIterator end = node + (range - 1);
     node->set_data(*first, range);
     for (; node != end; ++node)
@@ -838,9 +859,11 @@ namespace AABB_tree {
       }
       else
       {
-        node->set_bbox(compute_bbox(first, first + range));
-
-        // sort primitives along longest axis aabb
+        // Compute bbox and sort primitives along longest axis aabbs
+        if constexpr(postprocess_bbox_computation)
+          node->set_bbox(compute_bbox.approx(first, first+range));
+        else
+          node->set_bbox(compute_bbox(first, first+range));
         split_primitives(first, first + range, node->bbox());
 
         // Write information of children
@@ -852,12 +875,22 @@ namespace AABB_tree {
         range = left_range;
       }
     }
+
+    // Merging bbox postprocess
+    if constexpr(postprocess_bbox_computation)
+    {
+      for (node--; node != begin; --node)
+        if(node->is_internal_node())
+          node->set_bbox(node->left_child().bbox() + node->right_child().bbox());
+      node->set_bbox(node->left_child().bbox() + node->right_child().bbox());
+    }
   }
 
   template<typename NodeIterator,
            typename ConstPrimitiveIterator,
            typename ComputeBbox,
-           typename SplitPrimitives>
+           typename SplitPrimitives,
+           bool postprocess_bbox_computation = false>
   struct Expand_parallel_range
   {
     using size_type = std::size_t;
@@ -898,8 +931,11 @@ namespace AABB_tree {
       : compute_bbox(other.compute_bbox),
         split_primitives(other.split_primitives)
     {
-      // Partition primitives and initialize the two child nodes.
-      other.m_node->set_bbox(compute_bbox(other.m_first, other.m_first+other.m_range));
+      // Compute bbox and sort primitives along longest axis aabbs
+      if constexpr(postprocess_bbox_computation)
+        other.m_node->set_bbox(compute_bbox.approx(other.m_first, other.m_first+other.m_range));
+      else
+        other.m_node->set_bbox(compute_bbox(other.m_first, other.m_first+other.m_range));
       split_primitives(other.m_first, other.m_first+other.m_range, other.m_node->bbox());
 
       // Split the subtree represented by other.
@@ -919,18 +955,32 @@ namespace AABB_tree {
     }
   };
 
-  template<typename Range>
+  template<bool postprocess_bbox_computation, typename Range>
   struct Expand_parallel_body
   {
     void operator()(const Range& range) const
     {
-      sequential_expand(range.m_node,
-                        range.m_first,
-                        range.m_range,
-                        range.compute_bbox,
-                        range.split_primitives);
+      sequential_expand<postprocess_bbox_computation>(range.m_node,
+                                                      range.m_first,
+                                                      range.m_range,
+                                                      range.compute_bbox,
+                                                      range.split_primitives);
     }
   };
+
+  // Recompute bbox of nodes
+  // Use by parallel_expand for nodes that were processed in parallel
+  template<typename ConcurrencyTag, typename Node>
+  void postprocess_bbox(Node& node, const std::size_t minsize = 1)
+  {
+    // TODO parallel call (The function shows very low running times in our test)
+    if(node.range() > minsize)
+    {
+      postprocess_bbox<ConcurrencyTag>(node.left_child(), minsize);
+      postprocess_bbox<ConcurrencyTag>(node.right_child(), minsize);
+    }
+    node.set_bbox(node.left_child().bbox() + node.right_child().bbox());
+  }
 
 } // end of namespace AABB_tree
 } // end of namespace internal
@@ -951,7 +1001,7 @@ namespace AABB_tree {
 #ifndef DOXYGEN_RUNNING
   // Build the data structure, after calls to insert(..)
   template<typename Tr>
-  template <class ConcurrencyTag, class ComputeBbox, class SplitPrimitives>
+  template <class ConcurrencyTag, bool postprocess_bbox_computation, class ComputeBbox, class SplitPrimitives>
   void AABB_tree<Tr>::custom_build(
     const ComputeBbox& compute_bbox,
     const SplitPrimitives& split_primitives)
@@ -966,7 +1016,9 @@ namespace AABB_tree {
                                         NodeIterator,
                                         ConstPrimitiveIterator,
                                         ComputeBbox,
-                                        SplitPrimitives>;
+                                        SplitPrimitives,
+                                        postprocess_bbox_computation>;
+
     if(ConcurrencyTag::is_parallel && m_primitives.size() > Range::grain_size) {
       Range range(m_nodes.begin(),
                   m_primitives.begin(),
@@ -976,16 +1028,20 @@ namespace AABB_tree {
 
       oneapi::tbb::parallel_for(
         range,
-        internal::AABB_tree::Expand_parallel_body<Range>{},
+        internal::AABB_tree::Expand_parallel_body<postprocess_bbox_computation, Range>{},
         oneapi::tbb::auto_partitioner{}
       );
+
+      if constexpr(postprocess_bbox_computation)
+        internal::AABB_tree::postprocess_bbox<ConcurrencyTag>(m_nodes[0], Range::grain_size);
     }
     else
 #endif
     if(m_primitives.size() > 1)
     {
       // constructs the tree
-      internal::AABB_tree::sequential_expand(m_nodes.begin(),
+      internal::AABB_tree::sequential_expand<postprocess_bbox_computation>
+                                            (m_nodes.begin(),
                                              m_primitives.begin(),
                                              m_primitives.size(),
                                              compute_bbox,
