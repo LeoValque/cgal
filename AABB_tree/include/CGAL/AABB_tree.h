@@ -798,24 +798,24 @@ namespace AABB_tree {
     // - The left child is node i + 1, associated with [f, f + r/2).
     // - The right child is node i + r/2, associated with [f + r/2, f + r).
     //
-    // When visiting an internal node, push the information for its right subtree
-    // onto the stack, then continue with its left subtree.
+    // When visiting an internal node, write the information of its two children
+    // Then continue with left child (its the next one)
     //
-    // When reaching a half-leaf (r == 3), the left child is a leaf and the right child is node i+1
+    // When reaching a half-leaf (r == 3), the left child is a leaf.
+    // Write the information of the right child (its the next one)
     //
     // When reaching a leaf (r == 2), a subtree is complete.
-    // Pop the stack to retrieve the next pending right subtree
-
-    std::vector<std::size_t> stack;
-    stack.reserve(std::numeric_limits<std::size_t>::digits);
+    // Read informations of the next node
 
     const NodeIterator end = node + (range - 1);
+    node->set_data(*first, range);
     for (; node != end; ++node)
     {
+      CGAL_assertion(node->range() == range);
+      CGAL_assertion(node->first_primtive() == &(*first));
       if (range == 2)
       {
         node->set_bbox(compute_bbox(first, first + 2));
-        node->set_children(*first, *(first + 1));
 
         // next index is a new subtree
         // read on the stack the range of the next subtree
@@ -824,18 +824,17 @@ namespace AABB_tree {
           // first, first+1 are the primitive of this node and
           // thus the primitive of next subtree start at first+2
           first = first+2;
-          CGAL_assertion(!stack.empty());
-          range = stack.back();
-          stack.pop_back();
+          // Read the range in the next node
+          range = (node+1)->range();
         }
       }
       else if (range == 3)
       {
         node->set_bbox(compute_bbox(first, first + 3));
-        node->set_children(*first, *(node + 1));
         // next index is the right child
         range = 2;
         ++first;
+        (node+1)->set_data(*first, 2);
       }
       else
       {
@@ -844,11 +843,11 @@ namespace AABB_tree {
         // sort primitives along longest axis aabb
         split_primitives(first, first + range, node->bbox());
 
+        // Write information of children
         const std::size_t left_range = range / 2;
-        node->set_children(*(node + 1), *(node + left_range));
+        (node+left_range)->set_data(*(first+left_range), range - left_range);
+        (node+1)->set_data(*first, left_range);
 
-        // write in the stack the informations of the right child
-        stack.push_back(range - left_range);
         // next index is the left child
         range = left_range;
       }
@@ -907,7 +906,7 @@ namespace AABB_tree {
       // Expand its root and generate two independent subtrees.
       const size_type left_range = other.m_range / 2;
       const size_type right_range = other.m_range - left_range;
-      other.m_node->set_children(*(other.m_node+1), *(other.m_node + left_range));
+      other.m_node->set_data(*other.m_first, other.m_range);
 
       // New range = right subtree
       m_node = other.m_node + left_range;

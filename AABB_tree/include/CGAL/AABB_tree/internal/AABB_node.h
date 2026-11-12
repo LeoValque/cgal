@@ -41,8 +41,7 @@ public:
   /// Constructor
   AABB_node()
     : m_bbox()
-    , m_p_left_child(nullptr)
-    , m_p_right_child(nullptr)      { };
+    , m_p_first_primitive(nullptr) { };
 
   AABB_node(Self&& node) = default;
 
@@ -89,40 +88,42 @@ private:
 
 
 public:
-  /// Helper functions
-  const Node& left_child() const
-                     { return *static_cast<Node*>(m_p_left_child); }
-  const Node& right_child() const
-                     { return *static_cast<Node*>(m_p_right_child); }
-  const Primitive& left_data() const
-                     { return *static_cast<Primitive*>(m_p_left_child); }
-  const Primitive& right_data() const
-                     { return *static_cast<Primitive*>(m_p_right_child); }
-  template <class Left, class Right>
-  void set_children(Left& l, Right& r)
+  void set_data(Primitive& first, std::size_t range)
   {
-    m_p_left_child = static_cast<void*>(std::addressof(l));
-    m_p_right_child = static_cast<void*>(std::addressof(r));
+    m_p_first_primitive = &first;
+    m_range = range;
   }
   void set_bbox(const Bounding_box& bbox)
   {
     m_bbox = bbox;
   }
 
-  Node& left_child() { return *static_cast<Node*>(m_p_left_child); }
-  Node& right_child() { return *static_cast<Node*>(m_p_right_child); }
-  Primitive& left_data() { return *static_cast<Primitive*>(m_p_left_child); }
-  Primitive& right_data() { return *static_cast<Primitive*>(m_p_right_child); }
+  // We exploit how the nodes are storing, let i the node index of this
+  // Index of the left child is i+1
+  // Index of the right child is i+left_child.range = i+range/2
+  // left_data is the first primitive
+  // right_data is first primitive + 1
+  Node& left_child() { return *(this + 1); }
+  Node& right_child() { return *(this + m_range / 2); }
+  Primitive& left_data() { return *(m_p_first_primitive); }
+  Primitive& right_data() { return *(m_p_first_primitive+1); }
+
+  const Node& left_child() const { return *(this + 1); }
+  const Node& right_child() const { return *(this + m_range / 2); }
+  const Primitive& left_data() const { return *(m_p_first_primitive); }
+  const Primitive& right_data() const { return *(m_p_first_primitive+1); }
+
+  bool is_leaf() const { CGAL_assertion(m_range >= 2); return m_range == 2; }
+  bool is_internal_node() const { CGAL_assertion(m_range >= 2); return m_range > 3; }
+  std::size_t range() const { CGAL_assertion(m_range >= 2); return m_range; }
+  Primitive* first_primitive() const { return m_p_first_primitive; }
 
 private:
   /// node bounding box
   Bounding_box m_bbox;
-
-  /// children nodes, either pointing towards children (if children are not leaves),
-  /// or pointing toward input primitives (if children are leaves).
-  void *m_p_left_child;
-  void *m_p_right_child;
-
+  /// currently used only by leaf
+  Primitive* m_p_first_primitive;
+  std::size_t m_range;
 };  // end class AABB_node
 
 
