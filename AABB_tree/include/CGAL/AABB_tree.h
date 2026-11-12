@@ -805,17 +805,8 @@ namespace AABB_tree {
     //
     // When reaching a leaf (r == 2), a subtree is complete.
     // Pop the stack to retrieve the next pending right subtree
-    struct Pending_subtree_information
-    {
-      std::size_t range;
-      ConstPrimitiveIterator first;
 
-      Pending_subtree_information(std::size_t range, ConstPrimitiveIterator first)
-        : range(range), first(first)
-      {}
-    };
-    std::vector<Pending_subtree_information> stack;
-
+    std::vector<std::size_t> stack;
     stack.reserve(std::numeric_limits<std::size_t>::digits);
 
     const NodeIterator end = node + (range - 1);
@@ -827,14 +818,15 @@ namespace AABB_tree {
         node->set_children(*first, *(first + 1));
 
         // next index is a new subtree
-        // read in the stack the informations of the next subtree
+        // read on the stack the range of the next subtree
         if (node != end - 1)
         {
+          // first, first+1 are the primitive of this node and
+          // thus the primitive of next subtree start at first+2
+          first = first+2;
           CGAL_assertion(!stack.empty());
-          range = stack.back().range;
-          first = stack.back().first;
+          range = stack.back();
           stack.pop_back();
-          CGAL_assertion(current_first + current_range <= beyond);
         }
       }
       else if (range == 3)
@@ -856,7 +848,7 @@ namespace AABB_tree {
         node->set_children(*(node + 1), *(node + left_range));
 
         // write in the stack the informations of the right child
-        stack.emplace_back(range - left_range, first + left_range);
+        stack.push_back(range - left_range);
         // next index is the left child
         range = left_range;
       }
