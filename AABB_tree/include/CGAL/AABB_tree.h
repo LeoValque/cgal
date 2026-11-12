@@ -886,6 +886,7 @@ namespace AABB_tree {
     }
   }
 
+#ifdef CGAL_LINKED_WITH_TBB
   template<typename NodeIterator,
            typename ConstPrimitiveIterator,
            typename ComputeBbox,
@@ -981,6 +982,7 @@ namespace AABB_tree {
     }
     node.set_bbox(node.left_child().bbox() + node.right_child().bbox());
   }
+#endif
 
 } // end of namespace AABB_tree
 } // end of namespace internal
