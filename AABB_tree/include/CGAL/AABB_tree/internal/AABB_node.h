@@ -37,6 +37,7 @@ private:
 
 public:
   typedef typename AABBTraits::Bounding_box Bounding_box;
+  typedef AABBTraits AABB_traits;
 
   /// Constructor
   AABB_node()
@@ -82,7 +83,6 @@ public:
 
 
 private:
-  typedef AABBTraits AABB_traits;
   typedef AABB_node<AABB_traits> Node;
   typedef typename AABB_traits::Primitive Primitive;
 
@@ -132,37 +132,45 @@ template<class Traversal_traits, class Query>
 void
 AABB_node<Tr>::traversal(const Query& query,
                          Traversal_traits& traits,
-                         const std::size_t nb_primitives) const
+                         const std::size_t /*nb_primitives*/) const
 {
-  // Recursive traversal
-  switch(nb_primitives)
+  // Mixed iterative/recursive version
+  // Keep iterative while only one child do intersect
+  // Did one recursive call if two children do_intersect and continue the current while
+  const auto* current = this;
+  while( traits.go_further() )
   {
-  case 2:
-    traits.intersection(query, left_data());
-    if( traits.go_further() )
+    if(current->range() == 2)
     {
-      traits.intersection(query, right_data());
+      traits.intersection(query, current->left_data());
+      if( traits.go_further() )
+        traits.intersection(query, current->right_data());
+      return;
     }
-    break;
-  case 3:
-    traits.intersection(query, left_data());
-    if( traits.go_further() && traits.do_intersect(query, right_child()) )
+    else if(current->range() == 3)
     {
-      right_child().traversal(query, traits, 2);
+      // Treat directly the three primitives
+      traits.intersection(query, current->left_data());
+      if( traits.go_further() )
+        traits.intersection(query, current->right_child().left_data());
+      if( traits.go_further() )
+        traits.intersection(query, current->right_child().right_data());
+      return;
     }
-    break;
-  default:
-    if( traits.do_intersect(query, left_child()) )
+    else
     {
-      left_child().traversal(query, traits, nb_primitives/2);
-      if( traits.go_further() && traits.do_intersect(query, right_child()) )
+      bool do_intersect_left  = traits.do_intersect(query, current->left_child());
+      bool do_intersect_right = traits.do_intersect(query, current->right_child());
+      if(do_intersect_left && do_intersect_right)
       {
-        right_child().traversal(query, traits, nb_primitives-nb_primitives/2);
+        current->left_child().traversal(query, traits, current->left_child().range());
+        if( traits.go_further() )
+          current = &current->right_child();
       }
-    }
-    else if( traits.do_intersect(query, right_child()) )
-    {
-      right_child().traversal(query, traits, nb_primitives-nb_primitives/2);
+      else if(!do_intersect_left && !do_intersect_right)
+        return;
+      else
+        current = do_intersect_left ? &current->left_child() : &current->right_child();
     }
   }
 }
