@@ -896,7 +896,8 @@ namespace AABB_tree {
   {
     using size_type = std::size_t;
 
-    static constexpr size_type grain_size = 1000;
+    // TODO finetune this value
+    static constexpr size_type grain_size = 3000;
 
     // Node data
     NodeIterator m_node;
@@ -918,11 +919,7 @@ namespace AABB_tree {
         split_primitives(split_primitives)
     {}
 
-    bool empty() const
-    {
-      return m_range == 0;
-    }
-
+    bool empty() const { return false; }
     bool is_divisible() const
     {
       return m_range > grain_size;
@@ -954,18 +951,10 @@ namespace AABB_tree {
       other.m_node++;
       other.m_range = left_range;
     }
-  };
 
-  template<bool postprocess_bbox_computation, typename Range>
-  struct Expand_parallel_body
-  {
-    void operator()(const Range& range) const
+    void run_in_sequential()
     {
-      sequential_expand<postprocess_bbox_computation>(range.m_node,
-                                                      range.m_first,
-                                                      range.m_range,
-                                                      range.compute_bbox,
-                                                      range.split_primitives);
+      sequential_expand<postprocess_bbox_computation>(m_node, m_first, m_range, compute_bbox, split_primitives);
     }
   };
 
@@ -1030,7 +1019,7 @@ namespace AABB_tree {
 
       oneapi::tbb::parallel_for(
         range,
-        internal::AABB_tree::Expand_parallel_body<postprocess_bbox_computation, Range>{},
+        [](Range& r){ r.run_in_sequential(); },
         oneapi::tbb::auto_partitioner{}
       );
 
