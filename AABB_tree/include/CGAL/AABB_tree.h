@@ -72,6 +72,9 @@ namespace CGAL {
   public:
     typedef AABBTraits AABB_traits;
 
+    /// @private
+    typedef AABB_node<AABBTraits> Node;
+
     /// \name Types
     ///@{
 
@@ -570,8 +573,6 @@ public:
     }
 
   private:
-    typedef AABB_node<AABBTraits> Node;
-
     /**
      * @brief Builds the tree by recursive expansion.
      * @param node the root node of the subtree to generate

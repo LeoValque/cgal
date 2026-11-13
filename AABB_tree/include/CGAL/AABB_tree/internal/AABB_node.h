@@ -126,7 +126,6 @@ private:
   std::size_t m_range;
 };  // end class AABB_node
 
-
 template<typename Tr>
 template<class Traversal_traits, class Query>
 void
